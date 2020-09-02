@@ -69,7 +69,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		var seqlabel string
 		for scanner.Scan() {
 			buf := scanner.Bytes()
-			if len(buf) == 0 || buf[0] == '>' {
+			if len(buf) > 0 && buf[0] == '>' {
 				todo <- jobT{seqlabel, fasta}
 				seqlabel, fasta = string(buf[1:]), nil
 				log.Debugf("%s %s reading fasta", filelabel, seqlabel)
