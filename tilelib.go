@@ -104,23 +104,19 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		})
 		totalFoundTags += len(found)
 
+		skipped := 0
 		path = path[:0]
 		last := foundtag{tagid: -1}
+		if tilelib.skipOOO {
+			keep := longestIncreasingSubsequence(len(found), func(i int) int { return int(found[i].tagid) })
+			for i, x := range keep {
+				found[i] = found[x]
+			}
+			skipped = len(found) - len(keep)
+			found = found[:len(keep)]
+		}
 		for i, f := range found {
 			log.Tracef("%s %s found[%d] == %#v", filelabel, job.label, i, f)
-			if tilelib.skipOOO {
-				if f.tagid < last.tagid+1 {
-					log.Debugf("%s %s skipped out-of-order tag %d (found at %d) because it appears after tag %d (found at %d)", filelabel, job.label, f.tagid, f.pos, last.tagid, last.pos)
-					continue
-				}
-				if f.tagid > last.tagid+1 && // accepting this tag would mean skipping some tags
-					i+1 < len(found) && // there is a "next" found tag after this one
-					found[i+1].tagid > last.tagid && // next found tag is usable (we haven't already passed it in accepted sequence)
-					found[i+1].tagid <= f.tagid { // next found tag is expected before this one (so we can't use both)
-					log.Debugf("%s %s skipped out-of-order tag %d (found at %d) because it appears between tag %d (found at %d) and %d (found at %d)", filelabel, job.label, f.tagid, f.pos, last.tagid, last.pos, found[i+1].tagid, found[i+1].pos)
-					continue
-				}
-			}
 			if last.taglen > 0 {
 				path = append(path, tilelib.getRef(last.tagid, job.fasta[last.pos:f.pos+f.taglen]))
 			}
@@ -133,7 +129,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		pathcopy := make([]tileLibRef, len(path))
 		copy(pathcopy, path)
 		ret[job.label] = pathcopy
-		log.Debugf("%s %s tiled with path len %d, skipped %d", filelabel, job.label, len(path), len(found)-len(path))
+		log.Debugf("%s %s tiled with path len %d, skipped %d", filelabel, job.label, len(path), skipped)
 		totalPathLen += len(path)
 	}
 	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences with '_' in name, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
