@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sort"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/kshedden/gonpy"
@@ -92,6 +93,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	if err != nil {
 		return 1
 	}
+	sort.Slice(cgs, func(i, j int) bool { return cgs[i].Name < cgs[j].Name })
 	cols := 0
 	for _, cg := range cgs {
 		if cols < len(cg.Variants) {
