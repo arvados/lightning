@@ -34,6 +34,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	priority := flags.Int("priority", 500, "container request priority")
 	inputFilename := flags.String("i", "-", "input `file`")
 	outputFilename := flags.String("o", "-", "output `file`")
+	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -65,7 +66,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"export-numpy", "-local=true", "-i", *inputFilename, "-o", "/mnt/output/library.npy"}
+		runner.Args = []string{"export-numpy", "-local=true", fmt.Sprintf("-one-hot=%v", *onehot), "-i", *inputFilename, "-o", "/mnt/output/library.npy"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -123,8 +124,14 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	if err != nil {
 		return 1
 	}
-	npw.Shape = []int{rows, cols}
-	npw.WriteUint16(out)
+	if *onehot {
+		out, cols := recodeOnehot(out, cols)
+		npw.Shape = []int{rows, cols}
+		npw.WriteUint8(out)
+	} else {
+		npw.Shape = []int{rows, cols}
+		npw.WriteUint16(out)
+	}
 	err = bufw.Flush()
 	if err != nil {
 		return 1
@@ -134,6 +141,33 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		return 1
 	}
 	return 0
+}
+
+func recodeOnehot(in []uint16, incols int) ([]uint8, int) {
+	rows := len(in) / incols
+	maxvalue := make([]uint16, incols)
+	for row := 0; row < rows; row++ {
+		for col := 0; col < incols; col++ {
+			if v := in[row*incols+col]; maxvalue[col] < v {
+				maxvalue[col] = v
+			}
+		}
+	}
+	outcol := make([]int, incols)
+	outcols := 0
+	for incol, v := range maxvalue {
+		outcol[incol] = outcols
+		outcols += int(v)
+	}
+	out := make([]uint8, rows*outcols)
+	for row := 0; row < rows; row++ {
+		for col := 0; col < incols; col++ {
+			if v := in[row*incols+col]; v > 0 {
+				out[row*outcols+outcol[col]+int(v)-1] = 1
+			}
+		}
+	}
+	return out, outcols
 }
 
 type nopCloser struct {
