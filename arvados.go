@@ -144,7 +144,7 @@ reconnect:
 					"method": "subscribe",
 					"filters": [][]interface{}{
 						{"object_uuid", "=", uuid},
-						{"event_type", "in", []string{"stderr", "crunch-run", "update"}},
+						{"event_type", "in", []string{"stderr", "crunch-run", "crunchstat", "update"}},
 					},
 				})
 			}
@@ -260,18 +260,24 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	neednewline := ""
+
 	lastState := cr.State
 	refreshCR := func() {
 		err = runner.Client.RequestAndDecode(&cr, "GET", "arvados/v1/container_requests/"+cr.UUID, nil, nil)
 		if err != nil {
+			fmt.Fprint(os.Stderr, neednewline)
 			log.Printf("error getting container request: %s", err)
 			return
 		}
 		if lastState != cr.State {
+			fmt.Fprint(os.Stderr, neednewline)
 			log.Printf("container request state: %s", cr.State)
 			lastState = cr.State
 		}
 		if subscribedUUID != cr.ContainerUUID {
+			fmt.Fprint(os.Stderr, neednewline)
+			neednewline = ""
 			if subscribedUUID != "" {
 				client.Unsubscribe(logch, subscribedUUID)
 			}
@@ -280,6 +286,7 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 		}
 	}
 
+	var reCrunchstat = regexp.MustCompile(`mem .* rss`)
 	for cr.State != arvados.ContainerRequestStateFinal {
 		select {
 		case <-ticker.C:
@@ -288,15 +295,26 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 			switch msg.EventType {
 			case "update":
 				refreshCR()
-			default:
+			case "stderr":
 				for _, line := range strings.Split(msg.Properties.Text, "\n") {
 					if line != "" {
+						fmt.Fprint(os.Stderr, neednewline)
+						neednewline = ""
 						log.Print(line)
+					}
+				}
+			case "crunchstat":
+				for _, line := range strings.Split(msg.Properties.Text, "\n") {
+					mem := reCrunchstat.FindString(line)
+					if mem != "" {
+						fmt.Fprintf(os.Stderr, "%s               \r", mem)
+						neednewline = "\n"
 					}
 				}
 			}
 		}
 	}
+	fmt.Fprint(os.Stderr, neednewline)
 
 	var c arvados.Container
 	err = runner.Client.RequestAndDecode(&c, "GET", "arvados/v1/containers/"+cr.ContainerUUID, nil, nil)
