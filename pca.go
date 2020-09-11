@@ -35,7 +35,7 @@ func (cmd *pythonPCA) RunCommand(prog string, args []string, stdin io.Reader, st
 		Name:        "lightning pca",
 		Client:      arvados.NewClientFromEnv(),
 		ProjectUUID: *projectUUID,
-		RAM:         150000000000,
+		RAM:         440000000000,
 		VCPUs:       1,
 		Priority:    *priority,
 	}
