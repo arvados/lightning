@@ -58,7 +58,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			Name:        "lightning export-numpy",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         64000000000,
+			RAM:         128000000000,
 			VCPUs:       2,
 			Priority:    *priority,
 		}
