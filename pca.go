@@ -151,11 +151,12 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	if *onehot {
 		data, cols = recodeOnehot(data, cols)
 	}
-	pca, err := nlp.NewPCA(*components).FitTransform(array2matrix(rows, cols, data))
+	pca, err := nlp.NewPCA(*components).FitTransform(array2matrix(rows, cols, data).T())
 	if err != nil {
 		return 1
 	}
 
+	pca = pca.T()
 	rows, cols = pca.Dims()
 	out := make([]float64, rows*cols)
 	for i := 0; i < rows; i++ {
