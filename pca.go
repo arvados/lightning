@@ -137,6 +137,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		}
 		defer input.Close()
 	}
+	log.Print("reading")
 	cgs, err := ReadCompactGenomes(input)
 	if err != nil {
 		return 1
@@ -145,18 +146,23 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	if err != nil {
 		return 1
 	}
+	log.Print("sorting")
 	sort.Slice(cgs, func(i, j int) bool { return cgs[i].Name < cgs[j].Name })
 
+	log.Print("converting cgs to array")
 	data, rows, cols := cgs2array(cgs)
 	if *onehot {
 		data, cols = recodeOnehot(data, cols)
 	}
+	log.Print("running fit+transform")
 	pca, err := nlp.NewPCA(*components).FitTransform(array2matrix(rows, cols, data).T())
 	if err != nil {
 		return 1
 	}
 
+	log.Print("transposing result")
 	pca = pca.T()
+	log.Print("copying result to numpy output array")
 	rows, cols = pca.Dims()
 	out := make([]float64, rows*cols)
 	for i := 0; i < rows; i++ {
@@ -181,6 +187,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		return 1
 	}
 	npw.Shape = []int{rows, cols}
+	log.Print("writing numpy")
 	npw.WriteFloat64(out)
 	err = bufw.Flush()
 	if err != nil {
@@ -190,6 +197,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	if err != nil {
 		return 1
 	}
+	log.Print("done")
 	return 0
 }
 
