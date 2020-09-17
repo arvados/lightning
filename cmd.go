@@ -22,7 +22,8 @@ var (
 		"export-numpy":       &exportNumpy{},
 		"filter":             &filterer{},
 		"build-docker-image": &buildDockerImage{},
-		"pca":                &pythonPCA{},
+		"pca-go":             &goPCA{},
+		"pca-py":             &pythonPCA{},
 		"plot":               &pythonPlot{},
 		"diff-fasta":         &diffFasta{},
 	})

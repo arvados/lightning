@@ -18,8 +18,9 @@ genome=$(lightning     ref2genome   -project ${project} -priority ${priority} -r
 fasta=$(lightning      vcf2fasta    -project ${project} -priority ${priority} -ref ${ref_fa} -genome ${genome} -mask=true ${gvcf})
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true ${fasta})
 filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${unfiltered} -min-coverage "0.9" -max-variants "30")
-numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${filtered} -one-hot)
-pca=$(lightning        pca          -project ${project} -priority ${priority} -i ${numpy})
+#numpy=$(lightning     export-numpy -project ${project} -priority ${priority} -i ${filtered} -one-hot)
+#pca=$(lightning       pca-py       -project ${project} -priority ${priority} -i ${numpy})
+pca=$(lightning        pca-go       -project ${project} -priority ${priority} -i ${filtered} -one-hot)
 plot=$(lightning       plot         -project ${project} -priority ${priority} -i ${pca} -labels-csv ${info}/sample_info.csv -sample-fasta-dir ${fasta})
 echo >&2 "https://workbench2.${plot%%-*}.arvadosapi.com/collections/${plot}"
 echo ${plot%%/*}

@@ -51,10 +51,10 @@ func (s *exportSuite) TestOnehot(c *check.C) {
 		incols  int
 		in      []uint16
 		outcols int
-		out     []uint8
+		out     []uint16
 	}{
-		{2, []uint16{1, 1, 1, 1}, 2, []uint8{1, 1, 1, 1}},
-		{2, []uint16{1, 1, 1, 2}, 3, []uint8{1, 1, 0, 1, 0, 1}},
+		{2, []uint16{1, 1, 1, 1}, 2, []uint16{1, 1, 1, 1}},
+		{2, []uint16{1, 1, 1, 2}, 3, []uint16{1, 1, 0, 1, 0, 1}},
 		{
 			// 2nd column => 3 one-hot columns
 			// 4th column => 0 one-hot columns
@@ -62,7 +62,7 @@ func (s *exportSuite) TestOnehot(c *check.C) {
 				1, 1, 0, 0,
 				1, 2, 1, 0,
 				1, 3, 0, 0,
-			}, 5, []uint8{
+			}, 5, []uint16{
 				1, 1, 0, 0, 0,
 				1, 0, 1, 0, 1,
 				1, 0, 0, 1, 0,
