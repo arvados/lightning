@@ -37,7 +37,7 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 		Name:        "lightning plot",
 		Client:      arvados.NewClientFromEnv(),
 		ProjectUUID: *projectUUID,
-		RAM:         1 << 30,
+		RAM:         4 << 30,
 		VCPUs:       1,
 		Priority:    *priority,
 		Mounts: map[string]map[string]interface{}{
