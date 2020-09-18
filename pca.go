@@ -155,20 +155,27 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, cols = recodeOnehot(data, cols)
 	}
-	log.Printf("running fit+transform: %d rows, %d cols", rows, cols)
-	pca, err := nlp.NewPCA(*components).FitTransform(array2matrix(rows, cols, data).T())
+	cgs = nil
+
+	log.Printf("creating matrix backed by array: %d rows, %d cols", rows, cols)
+	mtx := array2matrix(rows, cols, data).T()
+
+	log.Print("fitting")
+	transformer := nlp.NewPCA(*components)
+	transformer.Fit(mtx)
+	log.Printf("transforming")
+	mtx, err = transformer.Transform(mtx)
 	if err != nil {
 		return 1
 	}
+	mtx = mtx.T()
 
-	log.Print("transposing result")
-	pca = pca.T()
-	rows, cols = pca.Dims()
+	rows, cols = mtx.Dims()
 	log.Printf("copying result to numpy output array: %d rows, %d cols", rows, cols)
 	out := make([]float64, rows*cols)
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
-			out[i*cols+j] = pca.At(i, j)
+			out[i*cols+j] = mtx.At(i, j)
 		}
 	}
 

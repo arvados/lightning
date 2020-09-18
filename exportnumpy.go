@@ -157,16 +157,25 @@ func recodeOnehot(in []uint16, incols int) ([]uint16, int) {
 	}
 	outcol := make([]int, incols)
 	outcols := 0
+	dropped := 0
 	for incol, v := range maxvalue {
 		outcol[incol] = outcols
-		outcols += int(v)
+		if v == 0 {
+			dropped++
+		} else {
+			outcols += int(v)
+		}
 	}
+	log.Printf("recodeOnehot: dropped %d input cols with zero maxvalue", dropped)
+
 	out := make([]uint16, rows*outcols)
-	for row := 0; row < rows; row++ {
+	for inidx, row := 0, 0; row < rows; row++ {
+		outrow := out[row*outcols:]
 		for col := 0; col < incols; col++ {
-			if v := in[row*incols+col]; v > 0 {
-				out[row*outcols+outcol[col]+int(v)-1] = 1
+			if v := in[inidx]; v > 0 {
+				outrow[outcol[col]+int(v)-1] = 1
 			}
+			inidx++
 		}
 	}
 	return out, outcols
