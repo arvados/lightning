@@ -36,7 +36,7 @@ func (cmd *filterer) RunCommand(prog string, args []string, stdin io.Reader, std
 	inputFilename := flags.String("i", "-", "input `file`")
 	outputFilename := flags.String("o", "-", "output `file`")
 	maxvariants := flags.Int("max-variants", -1, "drop tiles with more than `N` variants")
-	mincoverage := flags.Float64("min-coverage", 1, "drop tiles with coverage less than `P` across all haplotypes (0 < P ≤ 1)")
+	mincoverage := flags.Float64("min-coverage", 0, "drop tiles with coverage less than `P` across all haplotypes (0 < P ≤ 1)")
 	maxtag := flags.Int("max-tag", -1, "drop tiles with tag ID > `N`")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -138,7 +138,7 @@ func (cmd *filterer) RunCommand(prog string, args []string, stdin io.Reader, std
 		}
 	}
 
-	if *mincoverage < 1 {
+	if *mincoverage > 0 {
 		mincov := int(*mincoverage * float64(len(cgs)*2))
 		cov := make([]int, ntags)
 		for _, cg := range cgs {
