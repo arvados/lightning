@@ -33,6 +33,7 @@ type importer struct {
 	runLocal       bool
 	skipOOO        bool
 	outputTiles    bool
+	includeNoCalls bool
 	encoder        *gob.Encoder
 }
 
@@ -52,6 +53,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.BoolVar(&cmd.runLocal, "local", false, "run on local host (default: run in an arvados container)")
 	flags.BoolVar(&cmd.skipOOO, "skip-ooo", false, "skip out-of-order tags")
 	flags.BoolVar(&cmd.outputTiles, "output-tiles", false, "include tile variant sequences in output file")
+	flags.BoolVar(&cmd.includeNoCalls, "include-no-calls", false, "treat tiles with no-calls as regular tiles")
 	priority := flags.Int("priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	loglevel := flags.String("loglevel", "info", "logging threshold (trace, debug, info, warn, error, fatal, or panic)")
@@ -110,7 +112,16 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			err = errors.New("cannot specify output file in container mode: not implemented")
 			return 1
 		}
-		runner.Args = append([]string{"import", "-local=true", "-loglevel=" + *loglevel, fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO), "-tag-library", cmd.tagLibraryFile, "-ref", cmd.refFile, fmt.Sprintf("-output-tiles=%v", cmd.outputTiles), "-o", cmd.outputFile}, inputs...)
+		runner.Args = append([]string{"import",
+			"-local=true",
+			"-loglevel=" + *loglevel,
+			fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO),
+			fmt.Sprintf("-output-tiles=%v", cmd.outputTiles),
+			fmt.Sprintf("-include-no-calls=%v", cmd.includeNoCalls),
+			"-tag-library", cmd.tagLibraryFile,
+			"-ref", cmd.refFile,
+			"-o", cmd.outputFile,
+		}, inputs...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -143,7 +154,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	bufw := bufio.NewWriter(output)
 	cmd.encoder = gob.NewEncoder(bufw)
 
-	tilelib := &tileLibrary{taglib: taglib, skipOOO: cmd.skipOOO}
+	tilelib := &tileLibrary{taglib: taglib, includeNoCalls: cmd.includeNoCalls, skipOOO: cmd.skipOOO}
 	if cmd.outputTiles {
 		tilelib.encoder = cmd.encoder
 	}

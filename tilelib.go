@@ -46,9 +46,10 @@ func (tseq tileSeq) Variants() ([]tileVariantID, int, int) {
 }
 
 type tileLibrary struct {
-	skipOOO bool
-	taglib  *tagLibrary
-	variant [][][blake2b.Size256]byte
+	includeNoCalls bool
+	skipOOO        bool
+	taglib         *tagLibrary
+	variant        [][][blake2b.Size256]byte
 	// count [][]int
 	// seq map[[blake2b.Size]byte][]byte
 	variants int
@@ -148,11 +149,13 @@ func (tilelib *tileLibrary) Len() int {
 // Return a tileLibRef for a tile with the given tag and sequence,
 // adding the sequence to the library if needed.
 func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
-	for _, b := range seq {
-		if b != 'a' && b != 'c' && b != 'g' && b != 't' {
-			// return "tile not found" if seq has any
-			// no-calls
-			return tileLibRef{tag: tag}
+	if !tilelib.includeNoCalls {
+		for _, b := range seq {
+			if b != 'a' && b != 'c' && b != 'g' && b != 't' {
+				// return "tile not found" if seq has any
+				// no-calls
+				return tileLibRef{tag: tag}
+			}
 		}
 	}
 	tilelib.mtx.Lock()
