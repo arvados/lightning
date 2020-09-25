@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/gob"
 	"io"
 	"strings"
 	"sync"
@@ -51,6 +52,8 @@ type tileLibrary struct {
 	// count [][]int
 	// seq map[[blake2b.Size]byte][]byte
 	variants int
+	// if non-nil, write out any tile variants added while tiling
+	encoder *gob.Encoder
 
 	mtx sync.Mutex
 }
@@ -153,7 +156,6 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		}
 	}
 	tilelib.mtx.Lock()
-	defer tilelib.mtx.Unlock()
 	// if tilelib.seq == nil {
 	// 	tilelib.seq = map[[blake2b.Size]byte][]byte{}
 	// }
@@ -163,11 +165,24 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	seqhash := blake2b.Sum256(seq)
 	for i, varhash := range tilelib.variant[tag] {
 		if varhash == seqhash {
+			tilelib.mtx.Unlock()
 			return tileLibRef{tag: tag, variant: tileVariantID(i + 1)}
 		}
 	}
 	tilelib.variants++
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
 	// tilelib.seq[seqhash] = append([]byte(nil), seq...)
-	return tileLibRef{tag: tag, variant: tileVariantID(len(tilelib.variant[tag]))}
+	ret := tileLibRef{tag: tag, variant: tileVariantID(len(tilelib.variant[tag]))}
+	tilelib.mtx.Unlock()
+
+	if tilelib.encoder != nil {
+		tilelib.encoder.Encode(LibraryEntry{
+			TileVariants: []TileVariant{{
+				Tag:      tag,
+				Blake2b:  seqhash,
+				Sequence: seq,
+			}},
+		})
+	}
+	return ret
 }

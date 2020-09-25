@@ -13,14 +13,16 @@ type CompactGenome struct {
 	Variants []tileVariantID
 }
 
+type TileVariant struct {
+	Tag      tagID
+	Blake2b  [blake2b.Size256]byte
+	Sequence []byte
+}
+
 type LibraryEntry struct {
 	TagSet         [][]byte
 	CompactGenomes []CompactGenome
-	TileVariants   []struct {
-		Tag      tagID
-		Blake2b  [blake2b.Size]byte
-		Sequence []byte
-	}
+	TileVariants   []TileVariant
 }
 
 func ReadCompactGenomes(rdr io.Reader) ([]CompactGenome, error) {

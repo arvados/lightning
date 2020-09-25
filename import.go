@@ -32,6 +32,7 @@ type importer struct {
 	projectUUID    string
 	runLocal       bool
 	skipOOO        bool
+	outputTiles    bool
 	encoder        *gob.Encoder
 }
 
@@ -50,6 +51,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.StringVar(&cmd.projectUUID, "project", "", "project `UUID` for output data")
 	flags.BoolVar(&cmd.runLocal, "local", false, "run on local host (default: run in an arvados container)")
 	flags.BoolVar(&cmd.skipOOO, "skip-ooo", false, "skip out-of-order tags")
+	flags.BoolVar(&cmd.outputTiles, "output-tiles", false, "include tile variant sequences in output file")
 	priority := flags.Int("priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	loglevel := flags.String("loglevel", "info", "logging threshold (trace, debug, info, warn, error, fatal, or panic)")
@@ -108,7 +110,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			err = errors.New("cannot specify output file in container mode: not implemented")
 			return 1
 		}
-		runner.Args = append([]string{"import", "-local=true", "-loglevel=" + *loglevel, fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO), "-tag-library", cmd.tagLibraryFile, "-ref", cmd.refFile, "-o", cmd.outputFile}, inputs...)
+		runner.Args = append([]string{"import", "-local=true", "-loglevel=" + *loglevel, fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO), "-tag-library", cmd.tagLibraryFile, "-ref", cmd.refFile, fmt.Sprintf("-output-tiles=%v", cmd.outputTiles), "-o", cmd.outputFile}, inputs...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -123,15 +125,10 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 1
 	}
 
-	tilelib, err := cmd.loadTileLibrary()
+	taglib, err := cmd.loadTagLibrary()
 	if err != nil {
 		return 1
 	}
-	go func() {
-		for range time.Tick(10 * time.Minute) {
-			log.Printf("tilelib.Len() == %d", tilelib.Len())
-		}
-	}()
 
 	var output io.WriteCloser
 	if cmd.outputFile == "-" {
@@ -145,6 +142,16 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	}
 	bufw := bufio.NewWriter(output)
 	cmd.encoder = gob.NewEncoder(bufw)
+
+	tilelib := &tileLibrary{taglib: taglib, skipOOO: cmd.skipOOO}
+	if cmd.outputTiles {
+		tilelib.encoder = cmd.encoder
+	}
+	go func() {
+		for range time.Tick(10 * time.Minute) {
+			log.Printf("tilelib.Len() == %d", tilelib.Len())
+		}
+	}()
 
 	err = cmd.tileInputs(tilelib, infiles)
 	if err != nil {
@@ -178,7 +185,7 @@ func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string) (tileSeq, er
 	return tilelib.TileFasta(infile, input)
 }
 
-func (cmd *importer) loadTileLibrary() (*tileLibrary, error) {
+func (cmd *importer) loadTagLibrary() (*tagLibrary, error) {
 	log.Printf("tag library %s load starting", cmd.tagLibraryFile)
 	f, err := os.Open(cmd.tagLibraryFile)
 	if err != nil {
@@ -202,7 +209,7 @@ func (cmd *importer) loadTileLibrary() (*tileLibrary, error) {
 		return nil, fmt.Errorf("cannot tile: tag library is empty")
 	}
 	log.Printf("tag library %s load done", cmd.tagLibraryFile)
-	return &tileLibrary{taglib: &taglib, skipOOO: cmd.skipOOO}, nil
+	return &taglib, nil
 }
 
 func listInputFiles(paths []string) (files []string, err error) {
