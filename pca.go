@@ -109,7 +109,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 			Name:        "lightning pca-go",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         432000000000,
+			RAM:         100000000000, // maybe 10x input size?
 			VCPUs:       2,
 			Priority:    *priority,
 		}
