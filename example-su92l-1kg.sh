@@ -17,6 +17,7 @@ tagset=su92l-4zz18-92bx4zjg5hgs3yc/tagset.fa.gz
 genome=$(lightning     ref2genome   -project ${project} -priority ${priority} -ref ${ref_fa})
 fasta=$(lightning      vcf2fasta    -project ${project} -priority ${priority} -ref ${ref_fa} -genome ${genome} -mask=true ${gvcf})
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true ${fasta})
+stats=$(lightning      stats        -project ${project} -priority ${priority} -i ${unfiltered})
 filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${unfiltered} -min-coverage "0.9" -max-variants "30")
 #numpy=$(lightning     export-numpy -project ${project} -priority ${priority} -i ${filtered} -one-hot)
 #pca=$(lightning       pca-py       -project ${project} -priority ${priority} -i ${numpy})
