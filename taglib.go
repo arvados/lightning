@@ -117,3 +117,17 @@ func (taglib *tagLibrary) setTags(tags [][]byte) error {
 	}
 	return nil
 }
+
+func (taglib *tagLibrary) Tags() [][]byte {
+	out := make([][]byte, len(taglib.tagmap))
+	untwobit := []byte{'a', 'c', 'g', 't'}
+	for key, info := range taglib.tagmap {
+		seq := make([]byte, taglib.keylen)
+		for i := len(seq) - 1; i >= 0; i-- {
+			seq[i] = untwobit[int(key)&3]
+			key = key >> 2
+		}
+		out[int(info.id)] = seq
+	}
+	return out
+}

@@ -156,6 +156,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 
 	tilelib := &tileLibrary{taglib: taglib, includeNoCalls: cmd.includeNoCalls, skipOOO: cmd.skipOOO}
 	if cmd.outputTiles {
+		cmd.encoder.Encode(LibraryEntry{TagSet: taglib.Tags()})
 		tilelib.encoder = cmd.encoder
 	}
 	go func() {
