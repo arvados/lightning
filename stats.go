@@ -119,7 +119,7 @@ func (cmd *stats) readLibrary(input io.Reader, output io.Writer) error {
 		NCVariantsBySize []int
 	}
 
-	dec := gob.NewDecoder(input)
+	dec := gob.NewDecoder(bufio.NewReaderSize(input, 1<<26))
 	for {
 		var ent LibraryEntry
 		err := dec.Decode(&ent)

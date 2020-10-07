@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/gob"
 	"io"
 	_ "net/http/pprof"
@@ -26,7 +27,7 @@ type LibraryEntry struct {
 }
 
 func ReadCompactGenomes(rdr io.Reader) ([]CompactGenome, error) {
-	dec := gob.NewDecoder(rdr)
+	dec := gob.NewDecoder(bufio.NewReaderSize(rdr, 1<<26))
 	var ret []CompactGenome
 	for {
 		var ent LibraryEntry
