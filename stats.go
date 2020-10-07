@@ -98,7 +98,7 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	}
 
 	bufw := bufio.NewWriter(output)
-	cmd.readLibrary(input, bufw)
+	cmd.doStats(input, bufw)
 	err = bufw.Flush()
 	if err != nil {
 		return 1
@@ -110,15 +110,17 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	return 0
 }
 
-func (cmd *stats) readLibrary(input io.Reader, output io.Writer) error {
+func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 	var ret struct {
 		Genomes          int
 		Tags             int
+		TagsPlacedNTimes []int // a[x]==y means there were y tags that placed x times
 		TileVariants     int
 		VariantsBySize   []int
 		NCVariantsBySize []int
 	}
 
+	var tagPlacements []int
 	dec := gob.NewDecoder(bufio.NewReaderSize(input, 1<<26))
 	for {
 		var ent LibraryEntry
@@ -129,8 +131,23 @@ func (cmd *stats) readLibrary(input io.Reader, output io.Writer) error {
 			return err
 		}
 		ret.Genomes += len(ent.CompactGenomes)
-		ret.Tags += len(ent.TagSet)
 		ret.TileVariants += len(ent.TileVariants)
+		if len(ent.TagSet) > 0 {
+			if ret.Tags > 0 {
+				return errors.New("invalid input: contains multiple tagsets")
+			}
+			ret.Tags = len(ent.TagSet)
+		}
+		for _, g := range ent.CompactGenomes {
+			if need := (len(g.Variants)+1)/2 - len(tagPlacements); need > 0 {
+				tagPlacements = append(tagPlacements, make([]int, need)...)
+			}
+			for idx, v := range g.Variants {
+				if v > 0 {
+					tagPlacements[idx/2]++
+				}
+			}
+		}
 		for _, tv := range ent.TileVariants {
 			if need := 1 + len(tv.Sequence) - len(ret.VariantsBySize); need > 0 {
 				ret.VariantsBySize = append(ret.VariantsBySize, make([]int, need)...)
@@ -151,5 +168,12 @@ func (cmd *stats) readLibrary(input io.Reader, output io.Writer) error {
 			}
 		}
 	}
+	for _, p := range tagPlacements {
+		for len(ret.TagsPlacedNTimes) <= p {
+			ret.TagsPlacedNTimes = append(ret.TagsPlacedNTimes, 0)
+		}
+		ret.TagsPlacedNTimes[p]++
+	}
+
 	return json.NewEncoder(output).Encode(ret)
 }
