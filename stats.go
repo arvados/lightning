@@ -17,7 +17,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type stats struct{}
+type stats struct {
+	debugUnplaced bool
+}
 
 func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
@@ -34,6 +36,7 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	priority := flags.Int("priority", 500, "container request priority")
 	inputFilename := flags.String("i", "-", "input `file`")
 	outputFilename := flags.String("o", "-", "output `file`")
+	flags.BoolVar(&cmd.debugUnplaced, "debug-unplaced", false, "output full list of unplaced tags")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -65,7 +68,7 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"stats", "-local=true", "-i", *inputFilename, "-o", "/mnt/output/stats.json"}
+		runner.Args = []string{"stats", "-local=true", fmt.Sprintf("-debug-unplaced=%v", cmd.debugUnplaced), "-i", *inputFilename, "-o", "/mnt/output/stats.json"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -118,8 +121,10 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 		TileVariants     int
 		VariantsBySize   []int
 		NCVariantsBySize []int
+		UnplacedTags     []string `json:",omitempty"`
 	}
 
+	var tagSet [][]byte
 	var tagPlacements []int
 	dec := gob.NewDecoder(bufio.NewReaderSize(input, 1<<26))
 	for {
@@ -137,6 +142,7 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 				return errors.New("invalid input: contains multiple tagsets")
 			}
 			ret.Tags = len(ent.TagSet)
+			tagSet = ent.TagSet
 		}
 		for _, g := range ent.CompactGenomes {
 			if need := (len(g.Variants)+1)/2 - len(tagPlacements); need > 0 {
@@ -168,11 +174,14 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 			}
 		}
 	}
-	for _, p := range tagPlacements {
+	for id, p := range tagPlacements {
 		for len(ret.TagsPlacedNTimes) <= p {
 			ret.TagsPlacedNTimes = append(ret.TagsPlacedNTimes, 0)
 		}
 		ret.TagsPlacedNTimes[p]++
+		if cmd.debugUnplaced && p == 0 {
+			ret.UnplacedTags = append(ret.UnplacedTags, fmt.Sprintf("%d %s", id, tagSet[id]))
+		}
 	}
 
 	return json.NewEncoder(output).Encode(ret)
