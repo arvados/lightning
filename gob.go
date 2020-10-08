@@ -16,6 +16,7 @@ type CompactGenome struct {
 
 type TileVariant struct {
 	Tag      tagID
+	Variant  tileVariantID
 	Blake2b  [blake2b.Size256]byte
 	Sequence []byte
 }

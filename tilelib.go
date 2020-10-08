@@ -175,13 +175,15 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	tilelib.variants++
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
 	// tilelib.seq[seqhash] = append([]byte(nil), seq...)
-	ret := tileLibRef{tag: tag, variant: tileVariantID(len(tilelib.variant[tag]))}
+	variant := tileVariantID(len(tilelib.variant[tag]))
+	ret := tileLibRef{tag: tag, variant: variant}
 	tilelib.mtx.Unlock()
 
 	if tilelib.encoder != nil {
 		tilelib.encoder.Encode(LibraryEntry{
 			TileVariants: []TileVariant{{
 				Tag:      tag,
+				Variant:  variant,
 				Blake2b:  seqhash,
 				Sequence: seq,
 			}},
