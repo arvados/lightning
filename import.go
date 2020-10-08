@@ -224,12 +224,19 @@ func (cmd *importer) loadTagLibrary() (*tagLibrary, error) {
 	return &taglib, nil
 }
 
+var (
+	vcfFilenameRe    = regexp.MustCompile(`\.vcf(\.gz)?$`)
+	fasta1FilenameRe = regexp.MustCompile(`\.1\.fa(sta)?(\.gz)?$`)
+	fasta2FilenameRe = regexp.MustCompile(`\.2\.fa(sta)?(\.gz)?$`)
+	fastaFilenameRe  = regexp.MustCompile(`\.fa(sta)?(\.gz)?$`)
+)
+
 func listInputFiles(paths []string) (files []string, err error) {
 	for _, path := range paths {
 		if fi, err := os.Stat(path); err != nil {
 			return nil, fmt.Errorf("%s: stat failed: %s", path, err)
 		} else if !fi.IsDir() {
-			if !strings.HasSuffix(path, ".2.fasta") || strings.HasSuffix(path, ".2.fasta.gz") {
+			if !fasta2FilenameRe.MatchString(path) {
 				files = append(files, path)
 			}
 			continue
@@ -245,23 +252,27 @@ func listInputFiles(paths []string) (files []string, err error) {
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			if strings.HasSuffix(name, ".vcf") || strings.HasSuffix(name, ".vcf.gz") {
+			if vcfFilenameRe.MatchString(name) {
 				files = append(files, filepath.Join(path, name))
-			} else if strings.HasSuffix(name, ".1.fasta") || strings.HasSuffix(name, ".1.fasta.gz") {
+			} else if fastaFilenameRe.MatchString(name) && !fasta2FilenameRe.MatchString(name) {
 				files = append(files, filepath.Join(path, name))
 			}
 		}
 		d.Close()
 	}
 	for _, file := range files {
-		if strings.HasSuffix(file, ".1.fasta") || strings.HasSuffix(file, ".1.fasta.gz") {
+		if fastaFilenameRe.MatchString(file) {
 			continue
-		} else if _, err := os.Stat(file + ".csi"); err == nil {
-			continue
-		} else if _, err = os.Stat(file + ".tbi"); err == nil {
-			continue
+		} else if vcfFilenameRe.MatchString(file) {
+			if _, err := os.Stat(file + ".csi"); err == nil {
+				continue
+			} else if _, err = os.Stat(file + ".tbi"); err == nil {
+				continue
+			} else {
+				return nil, fmt.Errorf("%s: cannot read without .tbi or .csi index file", file)
+			}
 		} else {
-			return nil, fmt.Errorf("%s: cannot read without .tbi or .csi index file", file)
+			return nil, fmt.Errorf("don't know how to handle filename %s", file)
 		}
 	}
 	return
@@ -277,7 +288,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 		var phases sync.WaitGroup
 		phases.Add(2)
 		variants := make([][]tileVariantID, 2)
-		if strings.HasSuffix(infile, ".1.fasta") || strings.HasSuffix(infile, ".1.fasta.gz") {
+		if fasta1FilenameRe.MatchString(infile) {
 			todo <- func() error {
 				defer phases.Done()
 				log.Printf("%s starting", infile)
@@ -288,7 +299,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
 				return err
 			}
-			infile2 := regexp.MustCompile(`\.1\.fasta(\.gz)?$`).ReplaceAllString(infile, `.2.fasta$1`)
+			infile2 := fasta1FilenameRe.ReplaceAllString(infile, `.2.fa$1$2`)
 			todo <- func() error {
 				defer phases.Done()
 				log.Printf("%s starting", infile2)
@@ -299,7 +310,20 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
 				return err
 			}
-		} else {
+		} else if fastaFilenameRe.MatchString(infile) {
+			todo <- func() error {
+				defer phases.Done()
+				defer phases.Done()
+				log.Printf("%s starting", infile)
+				defer log.Printf("%s done", infile)
+				tseqs, err := cmd.tileFasta(tilelib, infile)
+				var kept, dropped int
+				variants[0], kept, dropped = tseqs.Variants()
+				variants[1] = variants[0]
+				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
+				return err
+			}
+		} else if vcfFilenameRe.MatchString(infile) {
 			for phase := 0; phase < 2; phase++ {
 				phase := phase
 				todo <- func() error {
@@ -313,6 +337,8 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 					return err
 				}
 			}
+		} else {
+			panic(fmt.Sprintf("bug: unhandled filename %q", infile))
 		}
 		encodeJobs.Add(1)
 		go func() {
