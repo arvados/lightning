@@ -162,8 +162,24 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	// if tilelib.seq == nil {
 	// 	tilelib.seq = map[[blake2b.Size]byte][]byte{}
 	// }
-	if tilelib.variant == nil {
+	if tilelib.variant == nil && tilelib.taglib != nil {
 		tilelib.variant = make([][][blake2b.Size256]byte, tilelib.taglib.Len())
+	}
+	if int(tag) >= len(tilelib.variant) {
+		// If we haven't seen the tag library yet (as in a
+		// merge), tilelib.taglib.Len() is zero. We can still
+		// behave correctly, we just need to expand the
+		// tilelib.variant slice as needed.
+		if int(tag) >= cap(tilelib.variant) {
+			// Allocate 2x capacity.
+			newslice := make([][][blake2b.Size256]byte, int(tag)+1, (int(tag)+1)*2)
+			copy(newslice, tilelib.variant)
+			tilelib.variant = newslice[:int(tag)+1]
+		} else {
+			// Use previously allocated capacity, avoiding
+			// copy.
+			tilelib.variant = tilelib.variant[:int(tag)+1]
+		}
 	}
 	seqhash := blake2b.Sum256(seq)
 	for i, varhash := range tilelib.variant[tag] {
@@ -176,7 +192,6 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
 	// tilelib.seq[seqhash] = append([]byte(nil), seq...)
 	variant := tileVariantID(len(tilelib.variant[tag]))
-	ret := tileLibRef{tag: tag, variant: variant}
 	tilelib.mtx.Unlock()
 
 	if tilelib.encoder != nil {
@@ -189,5 +204,5 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 			}},
 		})
 	}
-	return ret
+	return tileLibRef{tag: tag, variant: variant}
 }

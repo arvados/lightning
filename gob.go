@@ -28,16 +28,27 @@ type LibraryEntry struct {
 }
 
 func ReadCompactGenomes(rdr io.Reader) ([]CompactGenome, error) {
-	dec := gob.NewDecoder(bufio.NewReaderSize(rdr, 1<<26))
 	var ret []CompactGenome
-	for {
-		var ent LibraryEntry
-		err := dec.Decode(&ent)
-		if err == io.EOF {
-			return ret, nil
-		} else if err != nil {
-			return nil, err
-		}
+	err := DecodeLibrary(rdr, func(ent *LibraryEntry) error {
 		ret = append(ret, ent.CompactGenomes...)
+		return nil
+	})
+	return ret, err
+}
+
+func DecodeLibrary(rdr io.Reader, cb func(*LibraryEntry) error) error {
+	dec := gob.NewDecoder(bufio.NewReaderSize(rdr, 1<<26))
+	var err error
+	for err == nil {
+		var ent LibraryEntry
+		err = dec.Decode(&ent)
+		if err == nil {
+			err = cb(&ent)
+		}
+	}
+	if err == io.EOF {
+		return nil
+	} else {
+		return err
 	}
 }
