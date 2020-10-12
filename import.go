@@ -307,7 +307,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				tseqs, err := cmd.tileFasta(tilelib, infile2)
 				var kept, dropped int
 				variants[1], kept, dropped = tseqs.Variants()
-				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
+				log.Printf("%s found %d unique tags plus %d repeats", infile2, kept, dropped)
 				return err
 			}
 		} else if fastaFilenameRe.MatchString(infile) {
