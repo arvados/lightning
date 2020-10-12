@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -55,8 +57,141 @@ type tileLibrary struct {
 	variants int
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
+	// if non-nil, call this func upon loading a genome
+	onLoadGenome func(CompactGenome)
 
 	mtx sync.Mutex
+}
+
+func (tilelib *tileLibrary) loadTagSet(newtagset [][]byte) error {
+	// Loading a tagset means either passing it through to the
+	// output (if it's the first one we've seen), or just ensuring
+	// it doesn't disagree with what we already have.
+	if len(newtagset) == 0 {
+		return nil
+	}
+	tilelib.mtx.Lock()
+	defer tilelib.mtx.Unlock()
+	if tilelib.taglib == nil || tilelib.taglib.Len() == 0 {
+		tilelib.taglib = &tagLibrary{}
+		err := tilelib.taglib.setTags(newtagset)
+		if err != nil {
+			return err
+		}
+		if tilelib.encoder != nil {
+			err = tilelib.encoder.Encode(LibraryEntry{
+				TagSet: newtagset,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	} else if tilelib.taglib.Len() != len(newtagset) {
+		return fmt.Errorf("cannot merge libraries with differing tagsets")
+	} else {
+		current := tilelib.taglib.Tags()
+		for i := range newtagset {
+			if !bytes.Equal(newtagset[i], current[i]) {
+				return fmt.Errorf("cannot merge libraries with differing tagsets")
+			}
+		}
+	}
+	return nil
+}
+
+func (tilelib *tileLibrary) loadTileVariants(tvs []TileVariant, variantmap map[tileLibRef]tileVariantID) error {
+	for _, tv := range tvs {
+		// Assign a new variant ID (unique across all inputs)
+		// for each input variant.
+		variantmap[tileLibRef{tag: tv.Tag, variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).variant
+	}
+	return nil
+}
+
+func (tilelib *tileLibrary) loadGenomes(genomes map[string][]tileVariantID, variantmap map[tileLibRef]tileVariantID, onLoadGenome func(CompactGenome)) error {
+	var wg sync.WaitGroup
+	errs := make(chan error, 1)
+	for name, variants := range genomes {
+		name, variants := name, variants
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i, variant := range variants {
+				if len(errs) > 0 {
+					return
+				}
+				if variant == 0 {
+					continue
+				}
+				tag := tagID(i / 2)
+				newvariant, ok := variantmap[tileLibRef{tag: tag, variant: variant}]
+				if !ok {
+					err := fmt.Errorf("oops: genome %q has variant %d for tag %d, but that variant was not in its library", name, variant, tag)
+					select {
+					case errs <- err:
+					default:
+					}
+					return
+				}
+				variants[i] = newvariant
+			}
+			if tilelib.encoder != nil {
+				for name, variants := range genomes {
+					cg := CompactGenome{
+						Name:     name,
+						Variants: variants,
+					}
+					if onLoadGenome != nil {
+						onLoadGenome(cg)
+					}
+					err := tilelib.encoder.Encode(LibraryEntry{
+						CompactGenomes: []CompactGenome{cg},
+					})
+					if err != nil {
+						select {
+						case errs <- err:
+						default:
+						}
+						return
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	go close(errs)
+	return <-errs
+}
+
+func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGenome func(CompactGenome)) error {
+	genomes := map[string][]tileVariantID{}
+	variantmap := map[tileLibRef]tileVariantID{}
+	err := DecodeLibrary(rdr, func(ent *LibraryEntry) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := tilelib.loadTagSet(ent.TagSet); err != nil {
+			return err
+		} else if err = tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
+			return err
+		} else {
+			for _, cg := range ent.CompactGenomes {
+				genomes[cg.Name] = cg.Variants
+			}
+			return nil
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err = tilelib.loadGenomes(genomes, variantmap, onLoadGenome)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq, error) {

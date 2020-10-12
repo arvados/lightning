@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"bytes"
+	"context"
 	"encoding/gob"
 	"errors"
 	"flag"
@@ -25,7 +25,6 @@ type merger struct {
 	tagSet  [][]byte
 	tilelib *tileLibrary
 	mapped  map[string]map[tileLibRef]tileVariantID
-	todo    []liftCompactGenome
 	mtxTags sync.Mutex
 	errs    chan error
 }
@@ -112,67 +111,6 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 	return 0
 }
 
-func (cmd *merger) mergeLibraryEntry(ent *LibraryEntry, src string) error {
-	mapped := cmd.mapped[src]
-	if len(cmd.errs) > 0 {
-		return errors.New("stopping after error in other goroutine")
-	}
-	if len(ent.TagSet) > 0 {
-		// We don't need the tagset to do a merge, but if it
-		// does appear in the input, we (a) output it once,
-		// and (b) do a sanity check, erroring out if the
-		// inputs have different tagsets.
-		cmd.mtxTags.Lock()
-		defer cmd.mtxTags.Unlock()
-		if len(cmd.tagSet) == 0 {
-			cmd.tagSet = ent.TagSet
-			if cmd.tilelib.encoder != nil {
-				go cmd.tilelib.encoder.Encode(LibraryEntry{
-					TagSet: cmd.tagSet,
-				})
-			}
-		} else if len(cmd.tagSet) != len(ent.TagSet) {
-			return fmt.Errorf("cannot merge libraries with differing tagsets")
-		} else {
-			for i := range ent.TagSet {
-				if !bytes.Equal(ent.TagSet[i], cmd.tagSet[i]) {
-					return fmt.Errorf("cannot merge libraries with differing tagsets")
-				}
-			}
-		}
-	}
-	for _, tv := range ent.TileVariants {
-		// Assign a new variant ID (unique across all inputs)
-		// for each input variant.
-		mapped[tileLibRef{tag: tv.Tag, variant: tv.Variant}] = cmd.tilelib.getRef(tv.Tag, tv.Sequence).variant
-	}
-	for _, cg := range ent.CompactGenomes {
-		cmd.todo = append(cmd.todo, liftCompactGenome{cg, mapped})
-	}
-	return nil
-}
-
-type liftCompactGenome struct {
-	CompactGenome
-	mapped map[tileLibRef]tileVariantID
-}
-
-// Translate old variant IDs to new (mapped) variant IDs.
-func (cg liftCompactGenome) lift() error {
-	for i, variant := range cg.Variants {
-		if variant == 0 {
-			continue
-		}
-		tag := tagID(i / 2)
-		newvariant, ok := cg.mapped[tileLibRef{tag: tag, variant: variant}]
-		if !ok {
-			return fmt.Errorf("oops: ent.CompactGenomes[] (%q) refs tag %d variant %d which is not in library", cg.Name, tag, variant)
-		}
-		cg.Variants[tag] = newvariant
-	}
-	return nil
-}
-
 func (cmd *merger) setError(err error) {
 	select {
 	case cmd.errs <- err:
@@ -182,10 +120,22 @@ func (cmd *merger) setError(err error) {
 
 func (cmd *merger) doMerge() error {
 	w := bufio.NewWriter(cmd.output)
+	encoder := gob.NewEncoder(w)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cmd.errs = make(chan error, 1)
 	cmd.tilelib = &tileLibrary{
-		encoder:        gob.NewEncoder(w),
+		encoder:        encoder,
 		includeNoCalls: true,
+		onLoadGenome: func(cg CompactGenome) {
+			err := encoder.Encode(LibraryEntry{CompactGenomes: []CompactGenome{cg}})
+			if err != nil {
+				cmd.setError(err)
+				cancel()
+			}
+		},
 	}
 
 	cmd.mapped = map[string]map[tileLibRef]tileVariantID{}
@@ -210,16 +160,16 @@ func (cmd *merger) doMerge() error {
 		go func(input string) {
 			defer wg.Done()
 			log.Printf("%s: reading", input)
-			err := DecodeLibrary(infile, func(ent *LibraryEntry) error {
-				return cmd.mergeLibraryEntry(ent, input)
-			})
+			err := cmd.tilelib.LoadGob(ctx, infile, nil)
 			if err != nil {
-				cmd.setError(fmt.Errorf("%s: decode: %w", input, err))
+				cmd.setError(fmt.Errorf("%s: load failed: %w", input, err))
+				cancel()
 				return
 			}
 			err = infile.Close()
 			if err != nil {
-				cmd.setError(fmt.Errorf("%s: close: %w", input, err))
+				cmd.setError(fmt.Errorf("%s: error closing input file: %w", input, err))
+				cancel()
 				return
 			}
 			log.Printf("%s: done", input)
@@ -230,24 +180,8 @@ func (cmd *merger) doMerge() error {
 	if err := <-cmd.errs; err != nil {
 		return err
 	}
-
-	var cgs []CompactGenome
-	for _, cg := range cmd.todo {
-		err := cg.lift()
-		if err != nil {
-			return err
-		}
-		cgs = append(cgs, cg.CompactGenome)
-	}
-	err := cmd.tilelib.encoder.Encode(LibraryEntry{
-		CompactGenomes: cgs,
-	})
-	if err != nil {
-		return err
-	}
-
 	log.Print("flushing")
-	err = w.Flush()
+	err := w.Flush()
 	if err != nil {
 		return err
 	}
