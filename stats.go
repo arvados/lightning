@@ -101,7 +101,10 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	}
 
 	bufw := bufio.NewWriter(output)
-	cmd.doStats(input, bufw)
+	err = cmd.doStats(input, bufw)
+	if err != nil {
+		return 1
+	}
 	err = bufw.Flush()
 	if err != nil {
 		return 1
