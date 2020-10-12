@@ -136,7 +136,7 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return fmt.Errorf("gob decode: %w", err)
 		}
 		ret.Genomes += len(ent.CompactGenomes)
 		ret.TileVariants += len(ent.TileVariants)
