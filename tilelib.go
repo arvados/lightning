@@ -17,8 +17,8 @@ import (
 type tileVariantID uint16 // 1-based
 
 type tileLibRef struct {
-	tag     tagID
-	variant tileVariantID
+	Tag     tagID
+	Variant tileVariantID
 }
 
 type tileSeq map[string][]tileLibRef
@@ -27,8 +27,8 @@ func (tseq tileSeq) Variants() ([]tileVariantID, int, int) {
 	maxtag := 0
 	for _, refs := range tseq {
 		for _, ref := range refs {
-			if maxtag < int(ref.tag) {
-				maxtag = int(ref.tag)
+			if maxtag < int(ref.Tag) {
+				maxtag = int(ref.Tag)
 			}
 		}
 	}
@@ -36,12 +36,12 @@ func (tseq tileSeq) Variants() ([]tileVariantID, int, int) {
 	var kept, dropped int
 	for _, refs := range tseq {
 		for _, ref := range refs {
-			if vars[int(ref.tag)] != 0 {
+			if vars[int(ref.Tag)] != 0 {
 				dropped++
 			} else {
 				kept++
 			}
-			vars[int(ref.tag)] = ref.variant
+			vars[int(ref.Tag)] = ref.Variant
 		}
 	}
 	return vars, kept, dropped
@@ -52,13 +52,12 @@ type tileLibrary struct {
 	skipOOO        bool
 	taglib         *tagLibrary
 	variant        [][][blake2b.Size256]byte
+	refseqs        map[string]map[string][]tileLibRef
 	// count [][]int
 	// seq map[[blake2b.Size]byte][]byte
 	variants int
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
-	// if non-nil, call this func upon loading a genome
-	onLoadGenome func(CompactGenome)
 
 	mtx sync.Mutex
 }
@@ -103,16 +102,17 @@ func (tilelib *tileLibrary) loadTileVariants(tvs []TileVariant, variantmap map[t
 	for _, tv := range tvs {
 		// Assign a new variant ID (unique across all inputs)
 		// for each input variant.
-		variantmap[tileLibRef{tag: tv.Tag, variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).variant
+		variantmap[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).Variant
 	}
 	return nil
 }
 
-func (tilelib *tileLibrary) loadGenomes(genomes map[string][]tileVariantID, variantmap map[tileLibRef]tileVariantID, onLoadGenome func(CompactGenome)) error {
+func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap map[tileLibRef]tileVariantID, onLoadGenome func(CompactGenome)) error {
+	log.Debugf("loadCompactGenomes: %d", len(cgs))
 	var wg sync.WaitGroup
 	errs := make(chan error, 1)
-	for name, variants := range genomes {
-		name, variants := name, variants
+	for _, cg := range cgs {
+		name, variants := cg.Name, cg.Variants
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -124,7 +124,7 @@ func (tilelib *tileLibrary) loadGenomes(genomes map[string][]tileVariantID, vari
 					continue
 				}
 				tag := tagID(i / 2)
-				newvariant, ok := variantmap[tileLibRef{tag: tag, variant: variant}]
+				newvariant, ok := variantmap[tileLibRef{Tag: tag, Variant: variant}]
 				if !ok {
 					err := fmt.Errorf("oops: genome %q has variant %d for tag %d, but that variant was not in its library", name, variant, tag)
 					select {
@@ -133,27 +133,22 @@ func (tilelib *tileLibrary) loadGenomes(genomes map[string][]tileVariantID, vari
 					}
 					return
 				}
+				log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", name, tag, variant, newvariant)
 				variants[i] = newvariant
 			}
+			if onLoadGenome != nil {
+				onLoadGenome(cg)
+			}
 			if tilelib.encoder != nil {
-				for name, variants := range genomes {
-					cg := CompactGenome{
-						Name:     name,
-						Variants: variants,
+				err := tilelib.encoder.Encode(LibraryEntry{
+					CompactGenomes: []CompactGenome{cg},
+				})
+				if err != nil {
+					select {
+					case errs <- err:
+					default:
 					}
-					if onLoadGenome != nil {
-						onLoadGenome(cg)
-					}
-					err := tilelib.encoder.Encode(LibraryEntry{
-						CompactGenomes: []CompactGenome{cg},
-					})
-					if err != nil {
-						select {
-						case errs <- err:
-						default:
-						}
-						return
-					}
+					return
 				}
 			}
 		}()
@@ -163,8 +158,45 @@ func (tilelib *tileLibrary) loadGenomes(genomes map[string][]tileVariantID, vari
 	return <-errs
 }
 
+func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, variantmap map[tileLibRef]tileVariantID) error {
+	log.Debugf("loadCompactSequences: %d", len(cseqs))
+	for _, cseq := range cseqs {
+		for _, tseq := range cseq.TileSequences {
+			for i, libref := range tseq {
+				v, ok := variantmap[libref]
+				if !ok {
+					return fmt.Errorf("oops: CompactSequence %q has variant %d for tag %d, but that variant was not in its library", cseq.Name, libref.Variant, libref.Tag)
+				}
+				tseq[i].Variant = v
+			}
+		}
+		if tilelib.encoder != nil {
+			if err := tilelib.encoder.Encode(LibraryEntry{
+				CompactSequences: []CompactSequence{cseq},
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	tilelib.mtx.Lock()
+	defer tilelib.mtx.Unlock()
+	if tilelib.refseqs == nil {
+		tilelib.refseqs = map[string]map[string][]tileLibRef{}
+	}
+	for _, cseq := range cseqs {
+		tilelib.refseqs[cseq.Name] = cseq.TileSequences
+	}
+	return nil
+}
+
+// Load library data from rdr. Tile variants might be renumbered in
+// the process; in that case, genomes variants will be renumbered to
+// match.
+//
+// If onLoadGenome is non-nil, call it on each CompactGenome entry.
 func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGenome func(CompactGenome)) error {
-	genomes := map[string][]tileVariantID{}
+	cgs := []CompactGenome{}
+	cseqs := []CompactSequence{}
 	variantmap := map[tileLibRef]tileVariantID{}
 	err := DecodeLibrary(rdr, func(ent *LibraryEntry) error {
 		if ctx.Err() != nil {
@@ -172,14 +204,13 @@ func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGe
 		}
 		if err := tilelib.loadTagSet(ent.TagSet); err != nil {
 			return err
-		} else if err = tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
-			return err
-		} else {
-			for _, cg := range ent.CompactGenomes {
-				genomes[cg.Name] = cg.Variants
-			}
-			return nil
 		}
+		if err := tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
+			return err
+		}
+		cgs = append(cgs, ent.CompactGenomes...)
+		cseqs = append(cseqs, ent.CompactSequences...)
+		return nil
 	})
 	if err != nil {
 		return err
@@ -187,7 +218,11 @@ func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGe
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	err = tilelib.loadGenomes(genomes, variantmap, onLoadGenome)
+	err = tilelib.loadCompactGenomes(cgs, variantmap, onLoadGenome)
+	if err != nil {
+		return err
+	}
+	err = tilelib.loadCompactSequences(cseqs, variantmap)
 	if err != nil {
 		return err
 	}
@@ -258,11 +293,15 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 			log.Tracef("%s %s found[%d] == %#v", filelabel, job.label, i, f)
 			if last.taglen > 0 {
 				path = append(path, tilelib.getRef(last.tagid, job.fasta[last.pos:f.pos+f.taglen]))
+			} else {
+				f.pos = 0
 			}
 			last = f
 		}
 		if last.taglen > 0 {
 			path = append(path, tilelib.getRef(last.tagid, job.fasta[last.pos:]))
+		} else {
+			log.Warnf("%s %s no tags found", filelabel, job.label)
 		}
 
 		pathcopy := make([]tileLibRef, len(path))
@@ -289,7 +328,7 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 			if b != 'a' && b != 'c' && b != 'g' && b != 't' {
 				// return "tile not found" if seq has any
 				// no-calls
-				return tileLibRef{tag: tag}
+				return tileLibRef{Tag: tag}
 			}
 		}
 	}
@@ -320,7 +359,7 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	for i, varhash := range tilelib.variant[tag] {
 		if varhash == seqhash {
 			tilelib.mtx.Unlock()
-			return tileLibRef{tag: tag, variant: tileVariantID(i + 1)}
+			return tileLibRef{Tag: tag, Variant: tileVariantID(i + 1)}
 		}
 	}
 	tilelib.variants++
@@ -339,5 +378,5 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 			}},
 		})
 	}
-	return tileLibRef{tag: tag, variant: variant}
+	return tileLibRef{Tag: tag, Variant: variant}
 }

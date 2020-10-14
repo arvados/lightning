@@ -317,12 +317,20 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				log.Printf("%s starting", infile)
 				defer log.Printf("%s done", infile)
 				tseqs, err := cmd.tileFasta(tilelib, infile)
-				var kept, dropped int
-				variants[0], kept, dropped = tseqs.Variants()
-				variants[1] = variants[0]
-				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
-				return err
+				if err != nil {
+					return err
+				}
+				totlen := 0
+				for _, tseq := range tseqs {
+					totlen += len(tseq)
+				}
+				log.Printf("%s tiled %d seqs, total len %d", infile, len(tseqs), totlen)
+				return cmd.encoder.Encode(LibraryEntry{
+					CompactSequences: []CompactSequence{{Name: infile, TileSequences: tseqs}},
+				})
 			}
+			// Don't write out a CompactGenomes entry
+			continue
 		} else if vcfFilenameRe.MatchString(infile) {
 			for phase := 0; phase < 2; phase++ {
 				phase := phase
@@ -347,20 +355,8 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 			if len(errs) > 0 {
 				return
 			}
-			ntags := len(variants[0])
-			if ntags < len(variants[1]) {
-				ntags = len(variants[1])
-			}
-			flat := make([]tileVariantID, ntags*2)
-			for i := 0; i < ntags; i++ {
-				for hap := 0; hap < 2; hap++ {
-					if i < len(variants[hap]) {
-						flat[i*2+hap] = variants[hap][i]
-					}
-				}
-			}
 			err := cmd.encoder.Encode(LibraryEntry{
-				CompactGenomes: []CompactGenome{{Name: infile, Variants: flat}},
+				CompactGenomes: []CompactGenome{{Name: infile, Variants: flatten(variants)}},
 			})
 			if err != nil {
 				select {
@@ -449,4 +445,22 @@ func (cmd *importer) tileGVCF(tilelib *tileLibrary, infile string, phase int) (t
 		return
 	}
 	return
+}
+
+func flatten(variants [][]tileVariantID) []tileVariantID {
+	ntags := 0
+	for _, v := range variants {
+		if ntags < len(v) {
+			ntags = len(v)
+		}
+	}
+	flat := make([]tileVariantID, ntags*2)
+	for i := 0; i < ntags; i++ {
+		for hap := 0; hap < 2; hap++ {
+			if i < len(variants[hap]) {
+				flat[i*2+hap] = variants[hap][i]
+			}
+		}
+	}
+	return flat
 }

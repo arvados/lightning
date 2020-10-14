@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"sync"
 
@@ -69,8 +70,27 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Logf("len(merged) %d", merged.Len())
 
 	statsout := &bytes.Buffer{}
-	code = (&stats{}).RunCommand("lightning stats", []string{"-local"}, merged, statsout, os.Stderr)
+	code = (&stats{}).RunCommand("lightning stats", []string{"-local"}, bytes.NewReader(merged.Bytes()), statsout, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	c.Check(statsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", statsout.String())
+
+	c.Check(ioutil.WriteFile(tmpdir+"/merged.gob", merged.Bytes(), 0666), check.IsNil)
+
+	hgvsout := &bytes.Buffer{}
+	code = (&exportHGVS{}).RunCommand("lightning export-hgvs", []string{"-local", "-ref", "testdata/ref.fasta", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), hgvsout, os.Stderr)
+	c.Check(code, check.Equals, 0)
+	c.Check(hgvsout.Len() > 0, check.Equals, true)
+	c.Logf("%s", hgvsout.String())
+	c.Check(hgvsout.String(), check.Equals, `chr1:g.[41_42delinsAA];[41=]
+chr1:g.[161=];[161A>T]
+chr1:g.[178=];[178A>T]
+chr1:g.222_224del
+chr1:g.[302=];[302_305delinsAAAA]
+chr2:g.[813_826del];[813=]
+chr2:g.[830_841delinsAA];[830=]
+chr2:g.[887C>A];[887=]
+chr2:g.[1042_1044del];[1042=]
+chr2:g.[1043=];[1043_1044delinsAA]
+`)
 }

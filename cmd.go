@@ -19,6 +19,7 @@ var (
 		"ref2genome":         &ref2genome{},
 		"vcf2fasta":          &vcf2fasta{},
 		"import":             &importer{},
+		"export-hgvs":        &exportHGVS{},
 		"export-numpy":       &exportNumpy{},
 		"filter":             &filterer{},
 		"build-docker-image": &buildDockerImage{},

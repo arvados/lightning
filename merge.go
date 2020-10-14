@@ -129,13 +129,6 @@ func (cmd *merger) doMerge() error {
 	cmd.tilelib = &tileLibrary{
 		encoder:        encoder,
 		includeNoCalls: true,
-		onLoadGenome: func(cg CompactGenome) {
-			err := encoder.Encode(LibraryEntry{CompactGenomes: []CompactGenome{cg}})
-			if err != nil {
-				cmd.setError(err)
-				cancel()
-			}
-		},
 	}
 
 	cmd.mapped = map[string]map[tileLibRef]tileVariantID{}
