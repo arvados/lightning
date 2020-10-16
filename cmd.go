@@ -28,6 +28,7 @@ var (
 		"plot":               &pythonPlot{},
 		"diff-fasta":         &diffFasta{},
 		"stats":              &stats{},
+		"merge":              &merger{},
 	})
 )
 
