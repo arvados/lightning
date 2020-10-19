@@ -11,6 +11,7 @@ type Variant struct {
 	Position int
 	Ref      string
 	New      string
+	Left     string // base preceding an indel, if Ref or New is empty
 }
 
 func (v *Variant) String() string {
@@ -32,6 +33,24 @@ func (v *Variant) String() string {
 	}
 }
 
+// PadLeft returns a Variant that is equivalent to v but (if possible)
+// uses the stashed preceding base (the Left field) to avoid having a
+// non-empty Ref or New part, even for an insertion or deletion.
+//
+// For example, if v is {Position: 45, Ref: "", New: "A"}, PadLeft
+// might return {Position: 44, Ref: "T", New: "TA"}.
+func (v *Variant) PadLeft() Variant {
+	if len(v.Ref) == 0 || len(v.New) == 0 {
+		return Variant{
+			Position: v.Position - len(v.Left),
+			Ref:      v.Left + v.Ref,
+			New:      v.Left + v.New,
+		}
+	} else {
+		return *v
+	}
+}
+
 func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 	dmp := diffmatchpatch.New()
 	var deadline time.Time
@@ -44,12 +63,18 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 		timedOut = true
 	}
 	diffs = cleanup(dmp.DiffCleanupEfficiency(diffs))
+	left := "" // last char before an insertion or deletion
 	pos := 1
 	var variants []Variant
 	for i := 0; i < len(diffs); i++ {
 		switch diffs[i].Type {
 		case diffmatchpatch.DiffEqual:
 			pos += len(diffs[i].Text)
+			if tlen := len(diffs[i].Text); tlen > 0 {
+				left = diffs[i].Text[tlen-1:]
+			} else {
+				left = ""
+			}
 		case diffmatchpatch.DiffDelete:
 			if i+1 < len(diffs) && diffs[i+1].Type == diffmatchpatch.DiffInsert {
 				// deletion followed by insertion
@@ -57,9 +82,10 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 				pos += len(diffs[i].Text)
 				i++
 			} else {
-				variants = append(variants, Variant{Position: pos, Ref: diffs[i].Text})
+				variants = append(variants, Variant{Position: pos, Ref: diffs[i].Text, Left: left})
 				pos += len(diffs[i].Text)
 			}
+			left = ""
 		case diffmatchpatch.DiffInsert:
 			if i+1 < len(diffs) && diffs[i+1].Type == diffmatchpatch.DiffDelete {
 				// insertion followed by deletion
@@ -67,8 +93,9 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 				pos += len(diffs[i+1].Text)
 				i++
 			} else {
-				variants = append(variants, Variant{Position: pos, New: diffs[i].Text})
+				variants = append(variants, Variant{Position: pos, New: diffs[i].Text, Left: left})
 			}
+			left = ""
 		}
 	}
 	return variants, timedOut
