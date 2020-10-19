@@ -163,6 +163,12 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	for _, cseq := range cseqs {
 		for _, tseq := range cseq.TileSequences {
 			for i, libref := range tseq {
+				if libref.Variant == 0 {
+					// No variant (e.g., import
+					// dropped tiles with
+					// no-calls) = no translation.
+					continue
+				}
 				v, ok := variantmap[libref]
 				if !ok {
 					return fmt.Errorf("oops: CompactSequence %q has variant %d for tag %d, but that variant was not in its library", cseq.Name, libref.Variant, libref.Tag)
