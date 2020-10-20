@@ -78,7 +78,7 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Check(ioutil.WriteFile(tmpdir+"/merged.gob", merged.Bytes(), 0666), check.IsNil)
 
 	hgvsout := &bytes.Buffer{}
-	code = (&exportHGVS{}).RunCommand("lightning export-hgvs", []string{"-local", "-ref", "testdata/ref.fasta", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), hgvsout, os.Stderr)
+	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "hgvs", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), hgvsout, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	c.Check(hgvsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", hgvsout.String())
@@ -92,5 +92,22 @@ chr2:g.[830_841delinsAA];[830=]
 chr2:g.[887C>A];[887=]
 chr2:g.[1042_1044del];[1042=]
 chr2:g.[1043=];[1043_1044delinsAA]
+`)
+
+	vcfout := &bytes.Buffer{}
+	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "vcf", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), vcfout, os.Stderr)
+	c.Check(code, check.Equals, 0)
+	c.Check(vcfout.Len() > 0, check.Equals, true)
+	c.Logf("%s", vcfout.String())
+	c.Check(vcfout.String(), check.Equals, `chr1	41	TT	AA	1/0
+chr1	161	A	T	0/1
+chr1	178	A	T	0/1
+chr1	221	TCCA	T	1/1
+chr1	302	TTTT	AAAA	0/1
+chr2	812	ATTTTTCTTGCTCTC	A	1/0
+chr2	830	CCTTGTATTTTT	AA	1/0
+chr2	887	C	A	1/0
+chr2	1041	GTGG	G	1/0
+chr2	1043	GG	AA	0/1
 `)
 }

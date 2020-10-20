@@ -21,10 +21,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type exportHGVS struct {
+type outputFormat struct {
+	Print   func(out io.Writer, seqname string, varslice []hgvs.Variant)
+	PadLeft bool
 }
 
-func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+var (
+	outputFormats = map[string]outputFormat{
+		"hgvs": outputFormatHGVS,
+		"vcf":  outputFormatVCF,
+	}
+	outputFormatHGVS = outputFormat{Print: printHGVS}
+	outputFormatVCF  = outputFormat{Print: printVCF, PadLeft: true}
+)
+
+type exporter struct {
+	outputFormat outputFormat
+}
+
+func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
 	defer func() {
 		if err != nil {
@@ -39,7 +54,8 @@ func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, s
 	priority := flags.Int("priority", 500, "container request priority")
 	refname := flags.String("ref", "", "reference genome `name`")
 	inputFilename := flags.String("i", "-", "input `file` (library)")
-	outputFilename := flags.String("o", "-", "fasta output `file`")
+	outputFilename := flags.String("o", "-", "output `file`")
+	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
 	pick := flags.String("pick", "", "`name` of single genome to export")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -47,6 +63,13 @@ func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 0
 	} else if err != nil {
 		return 2
+	}
+
+	if f, ok := outputFormats[*outputFormatStr]; !ok {
+		err = fmt.Errorf("invalid output format %q", *outputFormatStr)
+		return 2
+	} else {
+		cmd.outputFormat = f
 	}
 
 	if *pprof != "" {
@@ -61,7 +84,7 @@ func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, s
 			return 1
 		}
 		runner := arvadosContainerRunner{
-			Name:        "lightning export-hgvs",
+			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         128000000000,
@@ -72,7 +95,7 @@ func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, s
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"export-hgvs", "-local=true", "-pick", *pick, "-ref", *refname, "-i", *inputFilename, "-o", "/mnt/output/export.csv"}
+		runner.Args = []string{"export", "-local=true", "-pick", *pick, "-ref", *refname, "-output-format", *outputFormatStr, "-i", *inputFilename, "-o", "/mnt/output/export.csv"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -162,13 +185,15 @@ func (cmd *exportHGVS) RunCommand(prog string, args []string, stdin io.Reader, s
 	return 0
 }
 
-func (cmd *exportHGVS) export(out io.Writer, librdr io.Reader, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
+func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
 	need := map[tileLibRef]bool{}
 	var seqnames []string
 	for seqname, librefs := range refseq {
 		seqnames = append(seqnames, seqname)
 		for _, libref := range librefs {
-			need[libref] = true
+			if libref.Variant != 0 {
+				need[libref] = true
+			}
 		}
 	}
 	sort.Strings(seqnames)
@@ -247,14 +272,17 @@ func (cmd *exportHGVS) export(out io.Writer, librdr io.Reader, taglen int, refse
 					}
 					vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genometile.Sequence)), time.Second)
 					for _, v := range vars {
+						if cmd.outputFormat.PadLeft {
+							v = v.PadLeft()
+						}
 						v.Position += refpos
 						log.Debugf("%s seq %s phase %d tag %d tile diff %s\n", cg.Name, seqname, phase, libref.Tag, v.String())
 						varslice := variantAt[v.Position]
 						if varslice == nil {
 							varslice = make([]hgvs.Variant, len(cgs)*2)
+							variantAt[v.Position] = varslice
 						}
 						varslice[cgidx*2+phase] = v
-						variantAt[v.Position] = varslice
 					}
 				}
 			}
@@ -279,28 +307,66 @@ func (cmd *exportHGVS) export(out io.Writer, librdr io.Reader, taglen int, refse
 						varslice[i].Position = pos
 					}
 				}
-				for i := 0; i < len(cgs); i++ {
-					if i > 0 {
-						out.Write([]byte{'\t'})
-					}
-					var1, var2 := varslice[i*2], varslice[i*2+1]
-					if var1.Position == 0 && var2.Position == 0 {
-						out.Write([]byte{'.'})
-					} else if var1 == var2 {
-						fmt.Fprintf(out, "%s:g.%s", seqname, var1.String())
-					} else {
-						if var1.Position == 0 {
-							var1.Position = pos
-						}
-						if var2.Position == 0 {
-							var2.Position = pos
-						}
-						fmt.Fprintf(out, "%s:g.[%s];[%s]", seqname, var1.String(), var2.String())
-					}
-				}
-				out.Write([]byte{'\n'})
+				cmd.outputFormat.Print(out, seqname, varslice)
 			}
 		}
 	}
 	return nil
+}
+
+func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
+	refs := map[string]map[string]int{}
+	for _, v := range varslice {
+		if v.Ref == "" && v.New == "" {
+			continue
+		}
+		alts := refs[v.Ref]
+		if alts == nil {
+			alts = map[string]int{}
+			refs[v.Ref] = alts
+		}
+		alts[v.New] = 0
+	}
+	for ref, alts := range refs {
+		var altslice []string
+		for alt := range alts {
+			altslice = append(altslice, alt)
+		}
+		sort.Strings(altslice)
+		for i, a := range altslice {
+			alts[a] = i + 1
+		}
+		fmt.Fprintf(out, "%s\t%d\t%s\t%s", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
+		for i := 0; i < len(varslice)/2; i++ {
+			v1, v2 := varslice[i*2], varslice[i*2+1]
+			a1, a2 := alts[v1.New], alts[v2.New]
+			if v1.Ref != ref {
+				a1 = 0
+			}
+			if v2.Ref != ref {
+				a2 = 0
+			}
+			fmt.Fprintf(out, "\t%d/%d", a1, a2)
+		}
+		out.Write([]byte{'\n'})
+	}
+}
+
+func printHGVS(out io.Writer, seqname string, varslice []hgvs.Variant) {
+	for i := 0; i < len(varslice)/2; i++ {
+		if i > 0 {
+			out.Write([]byte{'\t'})
+		}
+		var1, var2 := varslice[i*2], varslice[i*2+1]
+		if var1 == var2 {
+			if var1.Ref == var1.New {
+				out.Write([]byte{'.'})
+			} else {
+				fmt.Fprintf(out, "%s:g.%s", seqname, var1.String())
+			}
+		} else {
+			fmt.Fprintf(out, "%s:g.[%s];[%s]", seqname, var1.String(), var2.String())
+		}
+	}
+	out.Write([]byte{'\n'})
 }
