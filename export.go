@@ -56,6 +56,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	inputFilename := flags.String("i", "-", "input `file` (library)")
 	outputFilename := flags.String("o", "-", "output `file`")
 	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
+	outputBed := flags.String("output-bed", "", "also output bed `file`")
 	pick := flags.String("pick", "", "`name` of single genome to export")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -95,7 +96,14 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"export", "-local=true", "-pick", *pick, "-ref", *refname, "-output-format", *outputFormatStr, "-i", *inputFilename, "-o", "/mnt/output/export.csv"}
+		if *outputBed != "" {
+			if strings.Contains(*outputBed, "/") {
+				err = fmt.Errorf("cannot use -output-bed filename %q containing '/' char", *outputBed)
+				return 1
+			}
+			*outputBed = "/mnt/output/" + *outputBed
+		}
+		runner.Args = []string{"export", "-local=true", "-pick", *pick, "-ref", *refname, "-output-format", *outputFormatStr, "-output-bed", *outputBed, "-i", *inputFilename, "-o", "/mnt/output/export.csv"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -159,14 +167,26 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	if *outputFilename == "-" {
 		output = nopCloser{stdout}
 	} else {
-		output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0777)
+		output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			return 1
 		}
 		defer output.Close()
 	}
 	bufw := bufio.NewWriter(output)
-	err = cmd.export(bufw, input, tilelib.taglib.keylen, refseq, cgs)
+
+	var bedout *os.File
+	var bedbufw *bufio.Writer
+	if *outputBed != "" {
+		bedout, err = os.OpenFile(*outputBed, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return 1
+		}
+		defer bedout.Close()
+		bedbufw = bufio.NewWriter(bedout)
+	}
+
+	err = cmd.export(bufw, bedout, input, tilelib.taglib.keylen, refseq, cgs)
 	if err != nil {
 		return 1
 	}
@@ -178,6 +198,16 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	if err != nil {
 		return 1
 	}
+	if bedout != nil {
+		err = bedbufw.Flush()
+		if err != nil {
+			return 1
+		}
+		err = bedout.Close()
+		if err != nil {
+			return 1
+		}
+	}
 	err = input.Close()
 	if err != nil {
 		return 1
@@ -185,7 +215,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	return 0
 }
 
-func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
+func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
 	need := map[tileLibRef]bool{}
 	var seqnames []string
 	for seqname, librefs := range refseq {
@@ -244,6 +274,7 @@ func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq 
 		variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 		for refstep, libref := range refseq[seqname] {
 			reftile := tileVariant[libref]
+			coverage := int64(0) // number of ref bases that are called in genomes -- max is len(reftile.Sequence)*len(cgs)*2
 			for cgidx, cg := range cgs {
 				for phase := 0; phase < 2; phase++ {
 					if len(cg.Variants) <= int(libref.Tag)*2+phase {
@@ -270,6 +301,7 @@ func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq 
 						refSequence = append(refSequence, tileVariant[refseq[seqname][refstepend]].Sequence...)
 						refstepend++
 					}
+					// (TODO: handle no-calls)
 					vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genometile.Sequence)), time.Second)
 					for _, v := range vars {
 						if cmd.outputFormat.PadLeft {
@@ -284,6 +316,7 @@ func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq 
 						}
 						varslice[cgidx*2+phase] = v
 					}
+					coverage += int64(len(reftile.Sequence))
 				}
 			}
 			refpos += len(reftile.Sequence) - taglen
@@ -308,6 +341,25 @@ func (cmd *exporter) export(out io.Writer, librdr io.Reader, taglen int, refseq 
 					}
 				}
 				cmd.outputFormat.Print(out, seqname, varslice)
+			}
+			if bedout != nil && len(reftile.Sequence) > 0 {
+				tilestart := refpos - len(reftile.Sequence) + taglen
+				tileend := refpos
+				if !lastrefstep {
+					tileend += taglen
+				}
+				thickstart := tilestart + taglen
+				if refstep == 0 {
+					thickstart = 0
+				}
+				thickend := refpos
+				// coverage score, 0 to 1000
+				score := 1000 * coverage / int64(len(reftile.Sequence)) / int64(len(cgs)) / 2
+				fmt.Fprintf(bedout, "%s %d %d %d %d . %d %d\n",
+					seqname, tilestart, tileend,
+					libref.Tag,
+					score,
+					thickstart, thickend)
 			}
 		}
 	}
