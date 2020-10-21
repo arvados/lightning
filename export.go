@@ -131,7 +131,9 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 
 	var mtx sync.Mutex
 	var cgs []CompactGenome
-	var tilelib tileLibrary
+	tilelib := tileLibrary{
+		includeNoCalls: true,
+	}
 	err = tilelib.LoadGob(context.Background(), input, func(cg CompactGenome) {
 		if *pick != "" && *pick != cg.Name {
 			return
@@ -389,8 +391,8 @@ func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 			alts[a] = i + 1
 		}
 		fmt.Fprintf(out, "%s\t%d\t%s\t%s", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
-		for i := 0; i < len(varslice)/2; i++ {
-			v1, v2 := varslice[i*2], varslice[i*2+1]
+		for i := 0; i < len(varslice); i += 2 {
+			v1, v2 := varslice[i], varslice[i+1]
 			a1, a2 := alts[v1.New], alts[v2.New]
 			if v1.Ref != ref {
 				a1 = 0

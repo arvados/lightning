@@ -49,8 +49,8 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 
 	var wg sync.WaitGroup
 	for i, infile := range []string{
-		"testdata/pipeline1/",
 		"testdata/ref.fasta",
+		"testdata/pipeline1/",
 	} {
 		i, infile := i, infile
 		c.Logf("TestImportMerge: %s", infile)
@@ -58,7 +58,13 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			code := (&importer{}).RunCommand("lightning import", []string{"-local=true", "-o=" + libfile[i], "-skip-ooo=true", "-output-tiles", "-tag-library", "testdata/tags", infile}, bytes.NewReader(nil), &bytes.Buffer{}, os.Stderr)
+			args := []string{"-local=true", "-o=" + libfile[i], "-skip-ooo=true", "-output-tiles", "-tag-library", "testdata/tags"}
+			if i == 0 {
+				// ref only
+				args = append(args, "-include-no-calls")
+			}
+			args = append(args, infile)
+			code := (&importer{}).RunCommand("lightning import", args, bytes.NewReader(nil), &bytes.Buffer{}, os.Stderr)
 			c.Check(code, check.Equals, 0)
 		}()
 	}
@@ -82,7 +88,8 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Check(code, check.Equals, 0)
 	c.Check(hgvsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", hgvsout.String())
-	c.Check(hgvsout.String(), check.Equals, `chr1:g.[41_42delinsAA];[41=]
+	c.Check(hgvsout.String(), check.Equals, `chr1:g.1_3delinsGGC
+chr1:g.[41_42delinsAA];[41=]
 chr1:g.[161=];[161A>T]
 chr1:g.[178=];[178A>T]
 chr1:g.222_224del
@@ -99,7 +106,8 @@ chr2:g.[1043=];[1043_1044delinsAA]
 	c.Check(code, check.Equals, 0)
 	c.Check(vcfout.Len() > 0, check.Equals, true)
 	c.Logf("%s", vcfout.String())
-	c.Check(vcfout.String(), check.Equals, `chr1	41	TT	AA	1/0
+	c.Check(vcfout.String(), check.Equals, `chr1	1	NNN	GGC	1/1
+chr1	41	TT	AA	1/0
 chr1	161	A	T	0/1
 chr1	178	A	T	0/1
 chr1	221	TCCA	T	1/1
