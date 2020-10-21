@@ -63,40 +63,30 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 		timedOut = true
 	}
 	diffs = cleanup(dmp.DiffCleanupEfficiency(diffs))
-	left := "" // last char before an insertion or deletion
 	pos := 1
 	var variants []Variant
-	for i := 0; i < len(diffs); i++ {
-		switch diffs[i].Type {
-		case diffmatchpatch.DiffEqual:
+	for i := 0; i < len(diffs); {
+		left := "" // last char before an insertion or deletion
+		for ; i < len(diffs) && diffs[i].Type == diffmatchpatch.DiffEqual; i++ {
 			pos += len(diffs[i].Text)
 			if tlen := len(diffs[i].Text); tlen > 0 {
 				left = diffs[i].Text[tlen-1:]
-			} else {
-				left = ""
 			}
-		case diffmatchpatch.DiffDelete:
-			if i+1 < len(diffs) && diffs[i+1].Type == diffmatchpatch.DiffInsert {
-				// deletion followed by insertion
-				variants = append(variants, Variant{Position: pos, Ref: diffs[i].Text, New: diffs[i+1].Text})
-				pos += len(diffs[i].Text)
-				i++
-			} else {
-				variants = append(variants, Variant{Position: pos, Ref: diffs[i].Text, Left: left})
-				pos += len(diffs[i].Text)
-			}
-			left = ""
-		case diffmatchpatch.DiffInsert:
-			if i+1 < len(diffs) && diffs[i+1].Type == diffmatchpatch.DiffDelete {
-				// insertion followed by deletion
-				variants = append(variants, Variant{Position: pos, Ref: diffs[i+1].Text, New: diffs[i].Text})
-				pos += len(diffs[i+1].Text)
-				i++
-			} else {
-				variants = append(variants, Variant{Position: pos, New: diffs[i].Text, Left: left})
-			}
-			left = ""
 		}
+		if i >= len(diffs) {
+			break
+		}
+		v := Variant{Position: pos, Left: left}
+		for ; i < len(diffs) && diffs[i].Type != diffmatchpatch.DiffEqual; i++ {
+			if diffs[i].Type == diffmatchpatch.DiffDelete {
+				v.Ref += diffs[i].Text
+			} else {
+				v.New += diffs[i].Text
+			}
+		}
+		pos += len(v.Ref)
+		variants = append(variants, v)
+		left = ""
 	}
 	return variants, timedOut
 }
