@@ -89,7 +89,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         128000000000,
-			VCPUs:       2,
+			VCPUs:       32,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(inputFilename)
@@ -271,100 +271,134 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, taglen int,
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
-	for _, seqname := range seqnames {
-		refpos := 0
-		variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
-		for refstep, libref := range refseq[seqname] {
-			reftile := tileVariant[libref]
-			coverage := int64(0) // number of ref bases that are called in genomes -- max is len(reftile.Sequence)*len(cgs)*2
-			for cgidx, cg := range cgs {
-				for phase := 0; phase < 2; phase++ {
-					if len(cg.Variants) <= int(libref.Tag)*2+phase {
-						continue
-					}
-					variant := cg.Variants[int(libref.Tag)*2+phase]
-					if variant == 0 {
-						continue
-					}
-					genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
-					if variant == libref.Variant {
-						continue
-					}
-					refSequence := reftile.Sequence
-					// If needed, extend the
-					// reference sequence up to
-					// the tag at the end of the
-					// genometile sequence.
-					refstepend := refstep + 1
-					for refstepend < len(refseq[seqname]) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genometile.Sequence[len(genometile.Sequence)-taglen:]) {
-						if &refSequence[0] == &reftile.Sequence[0] {
-							refSequence = append([]byte(nil), refSequence...)
+	log.Infof("assembling %d sequences concurrently", len(seqnames))
+	var wg sync.WaitGroup
+	outbuf := make([]bytes.Buffer, len(seqnames))
+	bedbuf := make([]bytes.Buffer, len(seqnames))
+	for seqidx, seqname := range seqnames {
+		seqname := seqname
+		outbuf := &outbuf[seqidx]
+		bedbuf := &bedbuf[seqidx]
+		// TODO: limit number of goroutines and unflushed bufs to ncpus
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			refpos := 0
+			variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
+			for refstep, libref := range refseq[seqname] {
+				reftile := tileVariant[libref]
+				coverage := int64(0) // number of ref bases that are called in genomes -- max is len(reftile.Sequence)*len(cgs)*2
+				for cgidx, cg := range cgs {
+					for phase := 0; phase < 2; phase++ {
+						if len(cg.Variants) <= int(libref.Tag)*2+phase {
+							continue
 						}
-						refSequence = append(refSequence, tileVariant[refseq[seqname][refstepend]].Sequence...)
-						refstepend++
-					}
-					// (TODO: handle no-calls)
-					vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genometile.Sequence)), time.Second)
-					for _, v := range vars {
-						if cmd.outputFormat.PadLeft {
-							v = v.PadLeft()
+						variant := cg.Variants[int(libref.Tag)*2+phase]
+						if variant == 0 {
+							continue
 						}
-						v.Position += refpos
-						log.Debugf("%s seq %s phase %d tag %d tile diff %s\n", cg.Name, seqname, phase, libref.Tag, v.String())
-						varslice := variantAt[v.Position]
-						if varslice == nil {
-							varslice = make([]hgvs.Variant, len(cgs)*2)
-							variantAt[v.Position] = varslice
+						genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
+						if variant == libref.Variant {
+							continue
 						}
-						varslice[cgidx*2+phase] = v
+						refSequence := reftile.Sequence
+						// If needed, extend the
+						// reference sequence up to
+						// the tag at the end of the
+						// genometile sequence.
+						refstepend := refstep + 1
+						for refstepend < len(refseq[seqname]) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genometile.Sequence[len(genometile.Sequence)-taglen:]) {
+							if &refSequence[0] == &reftile.Sequence[0] {
+								refSequence = append([]byte(nil), refSequence...)
+							}
+							refSequence = append(refSequence, tileVariant[refseq[seqname][refstepend]].Sequence...)
+							refstepend++
+						}
+						// (TODO: handle no-calls)
+						vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genometile.Sequence)), time.Second)
+						for _, v := range vars {
+							if cmd.outputFormat.PadLeft {
+								v = v.PadLeft()
+							}
+							v.Position += refpos
+							log.Debugf("%s seq %s phase %d tag %d tile diff %s\n", cg.Name, seqname, phase, libref.Tag, v.String())
+							varslice := variantAt[v.Position]
+							if varslice == nil {
+								varslice = make([]hgvs.Variant, len(cgs)*2)
+								variantAt[v.Position] = varslice
+							}
+							varslice[cgidx*2+phase] = v
+						}
+						coverage += int64(len(reftile.Sequence))
 					}
-					coverage += int64(len(reftile.Sequence))
 				}
-			}
-			refpos += len(reftile.Sequence) - taglen
+				refpos += len(reftile.Sequence) - taglen
 
-			// Flush entries from variantAt that are
-			// behind refpos. Flush all entries if this is
-			// the last reftile of the path/chromosome.
-			var flushpos []int
-			lastrefstep := refstep == len(refseq[seqname])-1
-			for pos := range variantAt {
-				if lastrefstep || pos <= refpos {
-					flushpos = append(flushpos, pos)
-				}
-			}
-			sort.Slice(flushpos, func(i, j int) bool { return flushpos[i] < flushpos[j] })
-			for _, pos := range flushpos {
-				varslice := variantAt[pos]
-				delete(variantAt, pos)
-				for i := range varslice {
-					if varslice[i].Position == 0 {
-						varslice[i].Position = pos
+				// Flush entries from variantAt that are
+				// behind refpos. Flush all entries if this is
+				// the last reftile of the path/chromosome.
+				var flushpos []int
+				lastrefstep := refstep == len(refseq[seqname])-1
+				for pos := range variantAt {
+					if lastrefstep || pos <= refpos {
+						flushpos = append(flushpos, pos)
 					}
 				}
-				cmd.outputFormat.Print(out, seqname, varslice)
-			}
-			if bedout != nil && len(reftile.Sequence) > 0 {
-				tilestart := refpos - len(reftile.Sequence) + taglen
-				tileend := refpos
-				if !lastrefstep {
-					tileend += taglen
+				sort.Slice(flushpos, func(i, j int) bool { return flushpos[i] < flushpos[j] })
+				for _, pos := range flushpos {
+					varslice := variantAt[pos]
+					delete(variantAt, pos)
+					for i := range varslice {
+						if varslice[i].Position == 0 {
+							varslice[i].Position = pos
+						}
+					}
+					cmd.outputFormat.Print(outbuf, seqname, varslice)
 				}
-				thickstart := tilestart + taglen
-				if refstep == 0 {
-					thickstart = 0
+				if bedout != nil && len(reftile.Sequence) > 0 {
+					tilestart := refpos - len(reftile.Sequence) + taglen
+					tileend := refpos
+					if !lastrefstep {
+						tileend += taglen
+					}
+					thickstart := tilestart + taglen
+					if refstep == 0 {
+						thickstart = 0
+					}
+					thickend := refpos
+					// coverage score, 0 to 1000
+					score := 1000 * coverage / int64(len(reftile.Sequence)) / int64(len(cgs)) / 2
+					fmt.Fprintf(bedbuf, "%s %d %d %d %d . %d %d\n",
+						seqname, tilestart, tileend,
+						libref.Tag,
+						score,
+						thickstart, thickend)
 				}
-				thickend := refpos
-				// coverage score, 0 to 1000
-				score := 1000 * coverage / int64(len(reftile.Sequence)) / int64(len(cgs)) / 2
-				fmt.Fprintf(bedout, "%s %d %d %d %d . %d %d\n",
-					seqname, tilestart, tileend,
-					libref.Tag,
-					score,
-					thickstart, thickend)
 			}
-		}
+			log.Infof("assembled %q to outbuf %d bedbuf %d", seqname, outbuf.Len(), bedbuf.Len())
+		}()
 	}
+	wg.Wait()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i, seqname := range seqnames {
+			log.Infof("writing outbuf %s", seqname)
+			io.Copy(out, &outbuf[i])
+		}
+	}()
+	if bedout != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i, seqname := range seqnames {
+				log.Infof("writing bedbuf %s", seqname)
+				io.Copy(bedout, &bedbuf[i])
+			}
+		}()
+	}
+	wg.Wait()
 	return nil
 }
 
