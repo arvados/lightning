@@ -387,9 +387,11 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 					}
 				}
 				remain := len(todo) + int(atomic.LoadInt64(&running)) - 1
-				ttl := time.Now().Sub(starttime) * time.Duration(remain) / time.Duration(cap(todo)-remain)
-				eta := time.Now().Add(ttl)
-				log.Printf("progress %d/%d, eta %v (%v)", cap(todo)-remain, cap(todo), eta, ttl)
+				if remain < cap(todo) {
+					ttl := time.Now().Sub(starttime) * time.Duration(remain) / time.Duration(cap(todo)-remain)
+					eta := time.Now().Add(ttl)
+					log.Printf("progress %d/%d, eta %v (%v)", cap(todo)-remain, cap(todo), eta, ttl)
+				}
 			}
 		}()
 	}
