@@ -112,11 +112,11 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 	var wg sync.WaitGroup
 	errs := make(chan error, 1)
 	for _, cg := range cgs {
-		name, variants := cg.Name, cg.Variants
 		wg.Add(1)
+		cg := cg
 		go func() {
 			defer wg.Done()
-			for i, variant := range variants {
+			for i, variant := range cg.Variants {
 				if len(errs) > 0 {
 					return
 				}
@@ -126,15 +126,15 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 				tag := tagID(i / 2)
 				newvariant, ok := variantmap[tileLibRef{Tag: tag, Variant: variant}]
 				if !ok {
-					err := fmt.Errorf("oops: genome %q has variant %d for tag %d, but that variant was not in its library", name, variant, tag)
+					err := fmt.Errorf("oops: genome %q has variant %d for tag %d, but that variant was not in its library", cg.Name, variant, tag)
 					select {
 					case errs <- err:
 					default:
 					}
 					return
 				}
-				log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", name, tag, variant, newvariant)
-				variants[i] = newvariant
+				log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", cg.Name, tag, variant, newvariant)
+				cg.Variants[i] = newvariant
 			}
 			if onLoadGenome != nil {
 				onLoadGenome(cg)
