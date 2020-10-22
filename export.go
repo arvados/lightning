@@ -321,7 +321,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 	variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 	for refstep, libref := range reftiles {
 		reftile := tileVariant[libref]
-		coverage := int64(0) // number of ref bases that are called in genomes -- max is len(reftile.Sequence)*len(cgs)*2
+		tagcoverage := 0 // number of times the start tag was found in genomes -- max is len(cgs)*2
 		for cgidx, cg := range cgs {
 			for phase := 0; phase < 2; phase++ {
 				if len(cg.Variants) <= int(libref.Tag)*2+phase {
@@ -331,6 +331,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 				if variant == 0 {
 					continue
 				}
+				tagcoverage++
 				genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
 				if variant == libref.Variant {
 					continue
@@ -362,7 +363,6 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					}
 					varslice[cgidx*2+phase] = v
 				}
-				coverage += int64(len(reftile.Sequence))
 			}
 		}
 		refpos += len(reftile.Sequence) - taglen
@@ -400,7 +400,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 			}
 			thickend := refpos
 			// coverage score, 0 to 1000
-			score := 1000 * coverage / int64(len(reftile.Sequence)) / int64(len(cgs)) / 2
+			score := 1000 * tagcoverage / len(cgs) / 2
 			fmt.Fprintf(bedw, "%s %d %d %d %d . %d %d\n",
 				seqname, tilestart, tileend,
 				libref.Tag,
