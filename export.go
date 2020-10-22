@@ -271,8 +271,8 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, taglen int,
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
-	refpos := 0
 	for _, seqname := range seqnames {
+		refpos := 0
 		variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 		for refstep, libref := range refseq[seqname] {
 			reftile := tileVariant[libref]
