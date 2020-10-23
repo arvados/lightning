@@ -284,6 +284,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		})
 		totalFoundTags += len(found)
 
+		basesOut := 0
 		skipped := 0
 		path = path[:0]
 		last := foundtag{tagid: -1}
@@ -297,23 +298,48 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		}
 		for i, f := range found {
 			log.Tracef("%s %s found[%d] == %#v", filelabel, job.label, i, f)
-			if last.taglen > 0 {
-				path = append(path, tilelib.getRef(last.tagid, job.fasta[last.pos:f.pos+f.taglen]))
+			if last.tagid < 0 {
+				// first tag in sequence
+				last = foundtag{tagid: f.tagid}
+				continue
+			}
+			libref := tilelib.getRef(last.tagid, job.fasta[last.pos:f.pos+f.taglen])
+			path = append(path, libref)
+			if libref.Variant > 0 {
+				// Count output coverage from
+				// the end of the previous tag
+				// (if any) to the end of the
+				// current tag, IOW don't
+				// double-count coverage for
+				// the previous tag.
+				basesOut += countBases(job.fasta[last.pos+last.taglen : f.pos+f.taglen])
 			} else {
-				f.pos = 0
+				// If we dropped this tile
+				// (because !includeNoCalls),
+				// set taglen=0 so the
+				// overlapping tag is counted
+				// toward coverage on the
+				// following tile.
+				f.taglen = 0
 			}
 			last = f
 		}
-		if last.taglen > 0 {
-			path = append(path, tilelib.getRef(last.tagid, job.fasta[last.pos:]))
-		} else {
+		if last.tagid < 0 {
 			log.Warnf("%s %s no tags found", filelabel, job.label)
+		} else {
+			libref := tilelib.getRef(last.tagid, job.fasta[last.pos:])
+			path = append(path, libref)
+			if libref.Variant > 0 {
+				basesOut += countBases(job.fasta[last.pos+last.taglen:])
+			}
 		}
 
 		pathcopy := make([]tileLibRef, len(path))
 		copy(pathcopy, path)
 		ret[job.label] = pathcopy
 		log.Debugf("%s %s tiled with path len %d, skipped %d", filelabel, job.label, len(path), skipped)
+
+		log.Infof("%s %s fasta in %d coverage in %d coverage out %d", filelabel, job.label, len(job.fasta), countBases(job.fasta), basesOut)
 		totalPathLen += len(path)
 	}
 	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences with '_' in name, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
@@ -385,4 +411,14 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		})
 	}
 	return tileLibRef{Tag: tag, Variant: variant}
+}
+
+func countBases(seq []byte) int {
+	n := 0
+	for _, c := range seq {
+		if isbase[c] {
+			n++
+		}
+	}
+	return n
 }
