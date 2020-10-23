@@ -119,6 +119,7 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 	var ret struct {
 		Genomes          int
+		CalledBases      []int64
 		Tags             int
 		TagsPlacedNTimes []int // a[x]==y means there were y tags that placed x times
 		TileVariants     int
@@ -129,6 +130,7 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 
 	var tagSet [][]byte
 	var tagPlacements []int
+	tileVariantCalls := map[tileLibRef]int{}
 	dec := gob.NewDecoder(bufio.NewReaderSize(input, 1<<26))
 	for {
 		var ent LibraryEntry
@@ -147,25 +149,18 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 			ret.Tags = len(ent.TagSet)
 			tagSet = ent.TagSet
 		}
-		for _, g := range ent.CompactGenomes {
-			if need := (len(g.Variants)+1)/2 - len(tagPlacements); need > 0 {
-				tagPlacements = append(tagPlacements, make([]int, need)...)
-			}
-			for idx, v := range g.Variants {
-				if v > 0 {
-					tagPlacements[idx/2]++
-				}
-			}
-		}
 		for _, tv := range ent.TileVariants {
 			if need := 1 + len(tv.Sequence) - len(ret.VariantsBySize); need > 0 {
 				ret.VariantsBySize = append(ret.VariantsBySize, make([]int, need)...)
 				ret.NCVariantsBySize = append(ret.NCVariantsBySize, make([]int, need)...)
 			}
 
+			calls := 0
 			hasNoCalls := false
 			for _, b := range tv.Sequence {
-				if b != 'a' && b != 'c' && b != 'g' && b != 't' {
+				if b == 'a' || b == 'c' || b == 'g' || b == 't' {
+					calls++
+				} else {
 					hasNoCalls = true
 				}
 			}
@@ -175,6 +170,21 @@ func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
 			} else {
 				ret.VariantsBySize[len(tv.Sequence)]++
 			}
+
+			tileVariantCalls[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = calls
+		}
+		for _, g := range ent.CompactGenomes {
+			if need := (len(g.Variants)+1)/2 - len(tagPlacements); need > 0 {
+				tagPlacements = append(tagPlacements, make([]int, need)...)
+			}
+			calledBases := int64(0)
+			for idx, v := range g.Variants {
+				if v > 0 {
+					tagPlacements[idx/2]++
+					calledBases += int64(tileVariantCalls[tileLibRef{Tag: tagID(idx / 2), Variant: v}])
+				}
+			}
+			ret.CalledBases = append(ret.CalledBases, calledBases)
 		}
 	}
 	for id, p := range tagPlacements {
