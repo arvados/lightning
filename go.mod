@@ -22,6 +22,7 @@ require (
 	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2
 	golang.org/x/sys v0.0.0-20200519105757-fe76b779f299 // indirect
 	gonum.org/v1/gonum v0.8.1
+	gonum.org/v1/plot v0.0.0-20190515093506-e2840ee46a6b
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 )

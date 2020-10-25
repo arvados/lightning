@@ -21,6 +21,7 @@ var (
 		"ref2genome":         &ref2genome{},
 		"vcf2fasta":          &vcf2fasta{},
 		"import":             &importer{},
+		"import-stats-plot":  &importstatsplot{},
 		"export":             &exporter{},
 		"export-numpy":       &exportNumpy{},
 		"filter":             &filterer{},

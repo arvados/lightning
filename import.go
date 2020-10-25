@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image/color/palette"
 	"io"
 	"net/http"
 	_ "net/http/pprof"
@@ -24,6 +25,10 @@ import (
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	log "github.com/sirupsen/logrus"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/draw"
 )
 
 type importer struct {
@@ -496,4 +501,65 @@ func flatten(variants [][]tileVariantID) []tileVariantID {
 		}
 	}
 	return flat
+}
+
+type importstatsplot struct{}
+
+func (cmd *importstatsplot) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	err := cmd.Plot(stdin, stdout)
+	if err != nil {
+		log.Errorf("%s", err)
+		return 1
+	}
+	return 0
+}
+
+func (cmd *importstatsplot) Plot(stdin io.Reader, stdout io.Writer) error {
+	var stats []importStats
+	err := json.NewDecoder(stdin).Decode(&stats)
+	if err != nil {
+		return err
+	}
+
+	p, err := plot.New()
+	if err != nil {
+		return err
+	}
+	p.Title.Text = "coverage preserved by import (excl X<0.65)"
+	p.X.Label.Text = "input base calls ÷ sequence length"
+	p.Y.Label.Text = "output base calls ÷ input base calls"
+	p.Add(plotter.NewGrid())
+
+	data := map[string]plotter.XYs{}
+	for _, stat := range stats {
+		data[stat.InputLabel] = append(data[stat.InputLabel], plotter.XY{
+			X: float64(stat.InputCoverage) / float64(stat.InputLength),
+			Y: float64(stat.TileCoverage) / float64(stat.InputCoverage),
+		})
+	}
+
+	nextInPalette := 0
+	for label, xys := range data {
+		s, err := plotter.NewScatter(xys)
+		if err != nil {
+			return err
+		}
+		s.GlyphStyle.Color = palette.Plan9[nextInPalette%len(palette.Plan9)]
+		s.GlyphStyle.Radius = vg.Millimeter / 2
+		s.GlyphStyle.Shape = draw.CrossGlyph{}
+		nextInPalette += 7
+		p.Add(s)
+		if false {
+			p.Legend.Add(label, s)
+		}
+	}
+	p.X.Min = 0.65
+	p.X.Max = 1
+
+	w, err := p.WriterTo(8*vg.Inch, 6*vg.Inch, "svg")
+	if err != nil {
+		return err
+	}
+	_, err = w.WriteTo(stdout)
+	return err
 }
