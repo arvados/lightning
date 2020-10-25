@@ -8,6 +8,8 @@ import (
 	"os/exec"
 
 	"git.arvados.org/arvados.git/lib/cmd"
+	"github.com/mattn/go-isatty"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -33,6 +35,9 @@ var (
 )
 
 func main() {
+	if !isatty.IsTerminal(os.Stderr.Fd()) {
+		logrus.StandardLogger().Formatter = &logrus.TextFormatter{DisableTimestamp: true}
+	}
 	os.Exit(handler.RunCommand(os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
