@@ -17,11 +17,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type stats struct {
+type statscmd struct {
 	debugUnplaced bool
 }
 
-func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func (cmd *statscmd) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
 	defer func() {
 		if err != nil {
@@ -116,7 +116,7 @@ func (cmd *stats) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	return 0
 }
 
-func (cmd *stats) doStats(input io.Reader, output io.Writer) error {
+func (cmd *statscmd) doStats(input io.Reader, output io.Writer) error {
 	var ret struct {
 		Genomes          int
 		CalledBases      []int64

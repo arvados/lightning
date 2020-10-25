@@ -235,7 +235,17 @@ func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGe
 	return nil
 }
 
-func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq, error) {
+type importStats struct {
+	InputFile              string
+	InputLabel             string
+	InputLength            int
+	InputCoverage          int
+	TileCoverage           int
+	PathLength             int
+	DroppedOutOfOrderTiles int
+}
+
+func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq, []importStats, error) {
 	ret := tileSeq{}
 	type jobT struct {
 		label string
@@ -269,6 +279,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 	totalFoundTags := 0
 	totalPathLen := 0
 	skippedSequences := 0
+	stats := make([]importStats, 0, len(todo))
 	for job := range todo {
 		if len(job.fasta) == 0 {
 			continue
@@ -339,11 +350,22 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		ret[job.label] = pathcopy
 		log.Debugf("%s %s tiled with path len %d, skipped %d", filelabel, job.label, len(path), skipped)
 
-		log.Infof("%s %s fasta in %d coverage in %d coverage out %d", filelabel, job.label, len(job.fasta), countBases(job.fasta), basesOut)
+		basesIn := countBases(job.fasta)
+		log.Infof("%s %s fasta in %d coverage in %d coverage out %d", filelabel, job.label, len(job.fasta), basesIn, basesOut)
+		stats = append(stats, importStats{
+			InputFile:              filelabel,
+			InputLabel:             job.label,
+			InputLength:            len(job.fasta),
+			InputCoverage:          basesIn,
+			TileCoverage:           basesOut,
+			PathLength:             len(path),
+			DroppedOutOfOrderTiles: skipped,
+		})
+
 		totalPathLen += len(path)
 	}
 	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences with '_' in name, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
-	return ret, scanner.Err()
+	return ret, stats, scanner.Err()
 }
 
 func (tilelib *tileLibrary) Len() int {

@@ -35,7 +35,7 @@ func (s *pipelineSuite) TestImport(c *check.C) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			code := (&stats{}).RunCommand("lightning stats", []string{"-local"}, statsin, statsout, os.Stderr)
+			code := (&statscmd{}).RunCommand("lightning stats", []string{"-local"}, statsin, statsout, os.Stderr)
 			c.Check(code, check.Equals, 0)
 		}()
 		wg.Wait()
@@ -76,7 +76,7 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Logf("len(merged) %d", merged.Len())
 
 	statsout := &bytes.Buffer{}
-	code = (&stats{}).RunCommand("lightning stats", []string{"-local"}, bytes.NewReader(merged.Bytes()), statsout, os.Stderr)
+	code = (&statscmd{}).RunCommand("lightning stats", []string{"-local"}, bytes.NewReader(merged.Bytes()), statsout, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	c.Check(statsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", statsout.String())

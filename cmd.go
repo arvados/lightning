@@ -29,7 +29,7 @@ var (
 		"pca-py":             &pythonPCA{},
 		"plot":               &pythonPlot{},
 		"diff-fasta":         &diffFasta{},
-		"stats":              &stats{},
+		"stats":              &statscmd{},
 		"merge":              &merger{},
 	})
 )

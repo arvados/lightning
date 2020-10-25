@@ -34,7 +34,7 @@ gttattaataataacttatcatca
 func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 	// tags appear in seq: 4, 0, 2 (but skipOOO is false)
 	tilelib := &tileLibrary{taglib: &s.taglib, skipOOO: false}
-	tseq, err := tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err := tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[4]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[0]+
@@ -46,7 +46,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 0, 1, 2 -> don't skip
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[1]+
@@ -58,7 +58,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 2, 3, 4 -> don't skip
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[2]+
 		"cccccccccccccccccccc\n"+
 		s.tag[3]+
@@ -70,7 +70,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 4, 0, 2 -> skip 4
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[4]+
 		"cccccccccccccccccccc\n"+
 		s.tag[0]+
@@ -82,7 +82,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 0, 2, 1 -> skip 2
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[2]+
@@ -94,7 +94,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 0, 1, 1, 2 -> skip second tag1
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[1]+
@@ -108,7 +108,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 0, 1, 3, 0, 4 -> skip second tag0
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[1]+
@@ -124,7 +124,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 
 	// tags appear in seq: 0, 1, 3 -> don't skip
 	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
-	tseq, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
+	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[1]+
