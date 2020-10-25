@@ -34,8 +34,8 @@ exportvcf=$(lightning  export       -project ${project} -priority ${priority} -i
 # exportvcf=su92l-4zz18-gz4svr6zyvipueu/export.csv
 # 5506s
 
-stats=$(lightning      stats        -project ${project} -priority ${priority} -i ${unfiltered})                                                        ; echo stats=${stats}
-filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${unfiltered} -min-coverage "0.9" -max-variants "30")                 ; echo filtered=${filtered}
+stats=$(lightning      stats        -project ${project} -priority ${priority} -i ${merged})                                                            ; echo stats=${stats}
+filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${merged} -min-coverage "0.9" -max-variants "30")                     ; echo filtered=${filtered}
 
 pca=$(lightning        pca-go       -project ${project} -priority ${priority} -i ${filtered} -one-hot)                                                 ; echo pca=${pca}
 plot=$(lightning       plot         -project ${project} -priority ${priority} -i ${pca} -labels-csv ${info}/sample_info.csv -sample-fasta-dir ${fasta})
