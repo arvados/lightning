@@ -332,10 +332,10 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					continue
 				}
 				tagcoverage++
-				genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
 				if variant == libref.Variant {
 					continue
 				}
+				genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
 				refSequence := reftile.Sequence
 				// If needed, extend the reference
 				// sequence up to the tag at the end
