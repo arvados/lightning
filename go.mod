@@ -12,6 +12,7 @@ require (
 	github.com/james-bowman/nlp v0.0.0-20200417075118-1e2772e0e1e5
 	github.com/james-bowman/sparse v0.0.0-20200514124614-ae250424e52d // indirect
 	github.com/kshedden/gonpy v0.0.0-20190510000443-66c21fac4672
+	github.com/lucasb-eyer/go-colorful v1.0.3
 	github.com/mattn/go-isatty v0.0.12
 	github.com/prometheus/client_golang v1.6.0 // indirect
 	github.com/prometheus/common v0.10.0 // indirect

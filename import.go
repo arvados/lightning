@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"image/color/palette"
 	"io"
 	"net/http"
 	_ "net/http/pprof"
@@ -24,6 +23,7 @@ import (
 	"time"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
+	"github.com/lucasb-eyer/go-colorful"
 	log "github.com/sirupsen/logrus"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -538,13 +538,22 @@ func (cmd *importstatsplot) Plot(stdin io.Reader, stdout io.Writer) error {
 		})
 	}
 
+	labels := []string{}
+	for label := range data {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	palette, err := colorful.SoftPalette(len(labels))
+	if err != nil {
+		return err
+	}
 	nextInPalette := 0
-	for label, xys := range data {
-		s, err := plotter.NewScatter(xys)
+	for idx, label := range labels {
+		s, err := plotter.NewScatter(data[label])
 		if err != nil {
 			return err
 		}
-		s.GlyphStyle.Color = palette.Plan9[nextInPalette%len(palette.Plan9)]
+		s.GlyphStyle.Color = palette[idx]
 		s.GlyphStyle.Radius = vg.Millimeter / 2
 		s.GlyphStyle.Shape = draw.CrossGlyph{}
 		nextInPalette += 7
