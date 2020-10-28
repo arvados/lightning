@@ -348,10 +348,9 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 		pathcopy := make([]tileLibRef, len(path))
 		copy(pathcopy, path)
 		ret[job.label] = pathcopy
-		log.Debugf("%s %s tiled with path len %d, skipped %d", filelabel, job.label, len(path), skipped)
 
 		basesIn := countBases(job.fasta)
-		log.Infof("%s %s fasta in %d coverage in %d coverage out %d", filelabel, job.label, len(job.fasta), basesIn, basesOut)
+		log.Infof("%s %s fasta in %d coverage in %d coverage out %d path len %d skipped %d", filelabel, job.label, len(job.fasta), basesIn, basesOut, len(path), skipped)
 		stats = append(stats, importStats{
 			InputFile:              filelabel,
 			InputLabel:             job.label,
