@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 
 	"gopkg.in/check.v1"
@@ -134,4 +136,33 @@ chr2 224 372 5 750 . 248 348
 chr2 348 496 6 1000 . 372 472
 chr2 472 572 7 1000 . 496 572
 `)
+
+	annotateout := &bytes.Buffer{}
+	code = (&annotatecmd{}).RunCommand("lightning annotate", []string{"-local", "-variant-hash=true", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), annotateout, os.Stderr)
+	c.Check(code, check.Equals, 0)
+	c.Check(annotateout.Len() > 0, check.Equals, true)
+	sorted := sortLines(annotateout.String())
+	c.Logf("%s", sorted)
+	c.Check(sorted, check.Equals, sortLines(`0	8d4fe9a63921b	testdata/ref.fasta	chr1:g.161A>T
+0	8d4fe9a63921b	testdata/ref.fasta	chr1:g.178A>T
+0	8d4fe9a63921b	testdata/ref.fasta	chr1:g.1_3delinsGGC
+0	8d4fe9a63921b	testdata/ref.fasta	chr1:g.222_224del
+0	ba4263ca4199c	testdata/ref.fasta	chr1:g.1_3delinsGGC
+0	ba4263ca4199c	testdata/ref.fasta	chr1:g.222_224del
+0	ba4263ca4199c	testdata/ref.fasta	chr1:g.41_42delinsAA
+1	139890345dbb8	testdata/ref.fasta	chr1:g.302_305delinsAAAA
+4	cbfca15d241d3	testdata/ref.fasta	chr2:g.125_127delinsAAA
+4	cbfca15d241d3	testdata/ref.fasta	chr2:g.1_3delinsAAA
+4	f5fafe9450b02	testdata/ref.fasta	chr2:g.241_245delinsAAAAA
+4	f5fafe9450b02	testdata/ref.fasta	chr2:g.291C>A
+4	fe9a71a42adb4	testdata/ref.fasta	chr2:g.125_127delinsAAA
+6	e36dce85efbef	testdata/ref.fasta	chr2:g.471_472delinsAA
+6	f81388b184f4a	testdata/ref.fasta	chr2:g.470_472del
+`))
+}
+
+func sortLines(txt string) string {
+	lines := strings.Split(strings.TrimRightFunc(txt, func(c rune) bool { return c == '\n' }), "\n")
+	sort.Strings(lines)
+	return strings.Join(lines, "\n") + "\n"
 }

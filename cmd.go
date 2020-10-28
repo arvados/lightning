@@ -22,6 +22,7 @@ var (
 		"vcf2fasta":          &vcf2fasta{},
 		"import":             &importer{},
 		"import-stats-plot":  &importstatsplot{},
+		"annotate":           &annotatecmd{},
 		"export":             &exporter{},
 		"export-numpy":       &exportNumpy{},
 		"filter":             &filterer{},

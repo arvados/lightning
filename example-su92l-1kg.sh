@@ -27,7 +27,7 @@ unfiltered=$(lightning import       -project ${project} -priority ${priority} -t
 # unfiltered=su92l-4zz18-mz3546bib6oj1gg/library.gob
 
 merged=$(lightning     merge        -project ${project} -priority ${priority} ${unfiltered} ${ref37_lib})                                              ; echo merged=${merged}
-# merged=su92l-4zz18-bfs0wc658kbf3lf/library.gob
+# merged=su92l-4zz18-svw5xqe5g0ct2v1/library.gob
 # 2400s
 
 exportvcf=$(lightning  export       -project ${project} -priority ${priority} -i ${merged} -output-format vcf -ref /mnt/su92l-4zz18-caw3g2ji89jxix8/human_g1k_v37.fasta.gz -output-bed export.bed) ; echo exportvcf=${exportvcf}
@@ -35,7 +35,10 @@ exportvcf=$(lightning  export       -project ${project} -priority ${priority} -i
 # 5506s
 
 stats=$(lightning      stats        -project ${project} -priority ${priority} -i ${merged})                                                            ; echo stats=${stats}
+
 filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${merged} -min-coverage "0.9" -max-variants "30")                     ; echo filtered=${filtered}
+
+annotations=$(lightning annotate    -project ${project} -priority ${priority} -i ${merged})                                                            ; echo annotated=${annotated}
 
 pca=$(lightning        pca-go       -project ${project} -priority ${priority} -i ${filtered} -one-hot)                                                 ; echo pca=${pca}
 plot=$(lightning       plot         -project ${project} -priority ${priority} -i ${pca} -labels-csv ${info}/sample_info.csv -sample-fasta-dir ${fasta})
