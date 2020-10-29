@@ -40,7 +40,7 @@ stats=$(lightning      stats        -project ${project} -priority ${priority} -i
 
 filtered=$(lightning   filter       -project ${project} -priority ${priority} -i ${merged} -min-coverage "0.9" -max-variants "30")                     ; echo filtered=${filtered}
 
-annotations=$(lightning annotate    -project ${project} -priority ${priority} -i ${merged})                                                            ; echo annotated=${annotated}
+annotations=$(lightning annotate    -project ${project} -priority ${priority} -i ${merged})                                                            ; echo annotations=${annotations}
 
 pca=$(lightning        pca-go       -project ${project} -priority ${priority} -i ${filtered} -one-hot)                                                 ; echo pca=${pca}
 plot=$(lightning       plot         -project ${project} -priority ${priority} -i ${pca} -labels-csv ${info}/sample_info.csv -sample-fasta-dir ${fasta})
