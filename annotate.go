@@ -23,6 +23,7 @@ import (
 
 type annotatecmd struct {
 	variantHash bool
+	maxTileSize int
 }
 
 func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -41,6 +42,7 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 	inputFilename := flags.String("i", "-", "input `file` (library)")
 	outputFilename := flags.String("o", "-", "output `file`")
 	flags.BoolVar(&cmd.variantHash, "variant-hash", false, "output variant hash instead of index")
+	flags.IntVar(&cmd.maxTileSize, "max-tile-size", 50000, "don't try to make annotations for tiles bigger than given `size`")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -71,7 +73,7 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"annotate", "-local=true", fmt.Sprintf("-variant-hash=%v", cmd.variantHash), "-i", *inputFilename, "-o", "/mnt/output/tilevariants.tsv"}
+		runner.Args = []string{"annotate", "-local=true", fmt.Sprintf("-variant-hash=%v", cmd.variantHash), "-max-tile-size", strconv.Itoa(cmd.maxTileSize), "-i", *inputFilename, "-o", "/mnt/output/tilevariants.tsv"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -245,11 +247,11 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, librdr io.Reader) error 
 						refpart = refseq[refstart : refendtagstart+taglen]
 						log.Tracef("\n%x tilevar %d,%d endtag %s endtagid %d refendtagstart %d", tv.Blake2b[:13], tag, variant, endtag, endtagid, refendtagstart)
 					}
-					if len(refpart) > 10000 {
+					if len(refpart) > cmd.maxTileSize {
 						log.Warnf("%x tilevar %d,%d skipping long diff, ref %s seq %s ref len %d", tv.Blake2b[:13], tag, variant, refcs.Name, seqname, len(refpart))
 						continue
 					}
-					if len(tv.Sequence) > 10000 {
+					if len(tv.Sequence) > cmd.maxTileSize {
 						log.Warnf("%x tilevar %d,%d skipping long diff, ref %s seq %s variant len %d", tv.Blake2b[:13], tag, variant, refcs.Name, seqname, len(tv.Sequence))
 						continue
 					}
