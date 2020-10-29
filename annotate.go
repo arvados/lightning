@@ -248,7 +248,7 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, librdr io.Reader) error 
 						log.Tracef("\n%x tilevar %d,%d endtag %s endtagid %d refendtagstart %d", tv.Blake2b[:13], tag, variant, endtag, endtagid, refendtagstart)
 					}
 					if len(refpart) > cmd.maxTileSize {
-						log.Warnf("%x tilevar %d,%d skipping long diff, ref %s seq %s ref len %d", tv.Blake2b[:13], tag, variant, refcs.Name, seqname, len(refpart))
+						log.Warnf("%x tilevar %d,%d skipping long diff, ref %s seq %s pos %d ref len %d", tv.Blake2b[:13], tag, variant, refcs.Name, seqname, refstart, len(refpart))
 						continue
 					}
 					if len(tv.Sequence) > cmd.maxTileSize {
