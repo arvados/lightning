@@ -23,6 +23,8 @@ ref37_lib=$(lightning  import       -project ${project} -priority ${priority} -t
 # ref37_lib=su92l-4zz18-vnhlv3g6yp1azls/library.gob
 # 539s
 
+ref38_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -include-no-calls ${ref_fa}) ; echo ref38_lib=${ref38_lib}
+
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true ${fasta})       ; echo unfiltered=${unfiltered}
 # unfiltered=su92l-4zz18-mz3546bib6oj1gg/library.gob
 
