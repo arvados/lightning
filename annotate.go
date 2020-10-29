@@ -63,8 +63,8 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 			Name:        "lightning annotate",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         120000000000,
-			VCPUs:       32,
+			RAM:         80000000000,
+			VCPUs:       16,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(inputFilename)
