@@ -14,7 +14,7 @@ var _ = check.Suite(&exportSuite{})
 
 func (s *exportSuite) TestFastaToNumpy(c *check.C) {
 	var buffer bytes.Buffer
-	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-ref", "testdata/ref", "testdata/a.1.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
+	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-ref", "testdata/ref", "-output-tiles", "testdata/a.1.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
 	var output bytes.Buffer
 	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true"}, &buffer, &output, os.Stderr)

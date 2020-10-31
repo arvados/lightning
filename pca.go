@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"sort"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/james-bowman/nlp"
@@ -138,7 +138,11 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		defer input.Close()
 	}
 	log.Print("reading")
-	cgs, err := ReadCompactGenomes(input)
+	tilelib := tileLibrary{
+		includeNoCalls: true,
+		compactGenomes: map[string][]tileVariantID{},
+	}
+	err = tilelib.LoadGob(context.Background(), input, nil)
 	if err != nil {
 		return 1
 	}
@@ -146,16 +150,13 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	if err != nil {
 		return 1
 	}
-	log.Print("sorting")
-	sort.Slice(cgs, func(i, j int) bool { return cgs[i].Name < cgs[j].Name })
 
 	log.Print("converting cgs to array")
-	data, rows, cols := cgs2array(cgs)
+	data, rows, cols := cgs2array(tilelib.compactGenomes)
 	if *onehot {
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, cols = recodeOnehot(data, cols)
 	}
-	cgs = nil
 
 	log.Printf("creating matrix backed by array: %d rows, %d cols", rows, cols)
 	mtx := array2matrix(rows, cols, data).T()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -86,7 +87,11 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		}
 		defer input.Close()
 	}
-	cgs, err := ReadCompactGenomes(input)
+	tilelib := tileLibrary{
+		includeNoCalls: true,
+		compactGenomes: map[string][]tileVariantID{},
+	}
+	err = tilelib.LoadGob(context.Background(), input, nil)
 	if err != nil {
 		return 1
 	}
@@ -94,9 +99,8 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	if err != nil {
 		return 1
 	}
-	sort.Slice(cgs, func(i, j int) bool { return cgs[i].Name < cgs[j].Name })
 
-	out, rows, cols := cgs2array(cgs)
+	out, rows, cols := cgs2array(tilelib.compactGenomes)
 
 	var output io.WriteCloser
 	if *outputFilename == "-" {
@@ -129,16 +133,22 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	return 0
 }
 
-func cgs2array(cgs []CompactGenome) (data []uint16, rows, cols int) {
+func cgs2array(cgs map[string][]tileVariantID) (data []uint16, rows, cols int) {
+	var cgnames []string
+	for name := range cgs {
+		cgnames = append(cgnames, name)
+	}
+	sort.Strings(cgnames)
+
 	rows = len(cgs)
 	for _, cg := range cgs {
-		if cols < len(cg.Variants) {
-			cols = len(cg.Variants)
+		if cols < len(cg) {
+			cols = len(cg)
 		}
 	}
 	data = make([]uint16, rows*cols)
-	for row, cg := range cgs {
-		for i, v := range cg.Variants {
+	for row, name := range cgnames {
+		for i, v := range cgs[name] {
 			data[row*cols+i] = uint16(v)
 		}
 	}

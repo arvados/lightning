@@ -53,6 +53,7 @@ type tileLibrary struct {
 	taglib         *tagLibrary
 	variant        [][][blake2b.Size256]byte
 	refseqs        map[string]map[string][]tileLibRef
+	compactGenomes map[string][]tileVariantID
 	// count [][]int
 	// seq map[[blake2b.Size]byte][]byte
 	variants int
@@ -150,6 +151,11 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 					}
 					return
 				}
+			}
+			if tilelib.compactGenomes != nil {
+				tilelib.mtx.Lock()
+				defer tilelib.mtx.Unlock()
+				tilelib.compactGenomes[cg.Name] = cg.Variants
 			}
 		}()
 	}
