@@ -69,7 +69,7 @@ func (s *exportSuite) TestOnehot(c *check.C) {
 			},
 		},
 	} {
-		out, outcols := recodeOnehot(trial.in, trial.incols)
+		out, _, outcols := recodeOnehot(trial.in, trial.incols)
 		c.Check(out, check.DeepEquals, trial.out)
 		c.Check(outcols, check.Equals, trial.outcols)
 	}

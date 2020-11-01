@@ -155,7 +155,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	data, rows, cols := cgs2array(tilelib.compactGenomes)
 	if *onehot {
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
-		data, cols = recodeOnehot(data, cols)
+		data, _, cols = recodeOnehot(data, cols)
 	}
 
 	log.Printf("creating matrix backed by array: %d rows, %d cols", rows, cols)

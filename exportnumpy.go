@@ -18,7 +18,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type exportNumpy struct{}
+type exportNumpy struct {
+	filter filter
+}
 
 func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
@@ -35,7 +37,10 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	priority := flags.Int("priority", 500, "container request priority")
 	inputFilename := flags.String("i", "-", "input `file`")
 	outputFilename := flags.String("o", "-", "output `file`")
+	annotationsFilename := flags.String("output-annotations", "", "output `file` for tile variant annotations tsv")
+	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create tsv `file` mapping column# to tag# and variant#")
 	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
+	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -60,20 +65,20 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         128000000000,
-			VCPUs:       2,
+			VCPUs:       32,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(inputFilename)
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"export-numpy", "-local=true", fmt.Sprintf("-one-hot=%v", *onehot), "-i", *inputFilename, "-o", "/mnt/output/library.npy"}
+		runner.Args = []string{"export-numpy", "-local=true", fmt.Sprintf("-one-hot=%v", *onehot), "-i", *inputFilename, "-o", "/mnt/output/matrix.npy", "-output-annotations", "/mnt/output/annotations.tsv", "-output-onehot2tilevar", "/mnt/output/onehot2tilevar.tsv"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output+"/library.npy")
+		fmt.Fprintln(stdout, output+"/matrix.npy")
 		return 0
 	}
 
@@ -87,9 +92,10 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		}
 		defer input.Close()
 	}
-	tilelib := tileLibrary{
-		includeNoCalls: true,
-		compactGenomes: map[string][]tileVariantID{},
+	tilelib := &tileLibrary{
+		includeNoCalls:      true,
+		retainTileSequences: true,
+		compactGenomes:      map[string][]tileVariantID{},
 	}
 	err = tilelib.LoadGob(context.Background(), input, nil)
 	if err != nil {
@@ -100,8 +106,29 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		return 1
 	}
 
-	out, rows, cols := cgs2array(tilelib.compactGenomes)
+	log.Info("filtering")
+	cmd.filter.Apply(tilelib)
 
+	if *annotationsFilename != "" {
+		log.Infof("writing annotations")
+		var annow io.WriteCloser
+		annow, err = os.OpenFile(*annotationsFilename, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return 1
+		}
+		defer annow.Close()
+		err = (&annotatecmd{maxTileSize: 50000}).exportTileDiffs(annow, tilelib)
+		if err != nil {
+			return 1
+		}
+		err = annow.Close()
+		if err != nil {
+			return 1
+		}
+	}
+
+	log.Info("building numpy array")
+	out, rows, cols := cgs2array(tilelib.compactGenomes)
 	var output io.WriteCloser
 	if *outputFilename == "-" {
 		output = nopCloser{stdout}
@@ -118,8 +145,18 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		return 1
 	}
 	if *onehot {
-		out, cols = recodeOnehot(out, cols)
+		log.Info("recoding to onehot")
+		recoded, librefs, recodedcols := recodeOnehot(out, cols)
+		out, cols = recoded, recodedcols
+		if *librefsFilename != "" {
+			log.Infof("writing onehot column mapping")
+			err = cmd.writeLibRefs(*librefsFilename, tilelib, librefs)
+			if err != nil {
+				return 1
+			}
+		}
 	}
+	log.Info("writing numpy")
 	npw.Shape = []int{rows, cols}
 	npw.WriteUint16(out)
 	err = bufw.Flush()
@@ -131,6 +168,21 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		return 1
 	}
 	return 0
+}
+
+func (*exportNumpy) writeLibRefs(fnm string, tilelib *tileLibrary, librefs []tileLibRef) error {
+	f, err := os.OpenFile(fnm, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for i, libref := range librefs {
+		_, err = fmt.Fprintf(f, "%d\t%d\t%d\n", i, libref.Tag, libref.Variant)
+		if err != nil {
+			return err
+		}
+	}
+	return f.Close()
 }
 
 func cgs2array(cgs map[string][]tileVariantID) (data []uint16, rows, cols int) {
@@ -155,7 +207,7 @@ func cgs2array(cgs map[string][]tileVariantID) (data []uint16, rows, cols int) {
 	return
 }
 
-func recodeOnehot(in []uint16, incols int) ([]uint16, int) {
+func recodeOnehot(in []uint16, incols int) (out []uint16, librefs []tileLibRef, outcols int) {
 	rows := len(in) / incols
 	maxvalue := make([]uint16, incols)
 	for row := 0; row < rows; row++ {
@@ -166,19 +218,20 @@ func recodeOnehot(in []uint16, incols int) ([]uint16, int) {
 		}
 	}
 	outcol := make([]int, incols)
-	outcols := 0
 	dropped := 0
-	for incol, v := range maxvalue {
+	for incol, maxv := range maxvalue {
 		outcol[incol] = outcols
-		if v == 0 {
+		if maxv == 0 {
 			dropped++
-		} else {
-			outcols += int(v)
+		}
+		for v := 1; v <= int(maxv); v++ {
+			librefs = append(librefs, tileLibRef{Tag: tagID(incol), Variant: tileVariantID(v)})
+			outcols++
 		}
 	}
 	log.Printf("recodeOnehot: dropped %d input cols with zero maxvalue", dropped)
 
-	out := make([]uint16, rows*outcols)
+	out = make([]uint16, rows*outcols)
 	for inidx, row := 0, 0; row < rows; row++ {
 		outrow := out[row*outcols:]
 		for col := 0; col < incols; col++ {
@@ -188,7 +241,7 @@ func recodeOnehot(in []uint16, incols int) ([]uint16, int) {
 			inidx++
 		}
 	}
-	return out, outcols
+	return
 }
 
 type nopCloser struct {

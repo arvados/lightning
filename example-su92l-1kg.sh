@@ -47,4 +47,4 @@ plot=$(lightning       plot         -project ${project} -priority ${priority} -i
 echo >&2 "https://workbench2.${plot%%-*}.arvadosapi.com/collections/${plot}"
 echo ${plot%%/*}
 
-numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${filtered} -one-hot)
+numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${merged} -one-hot -max-variants "30" -min-coverage "0.9")

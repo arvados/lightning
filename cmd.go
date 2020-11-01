@@ -25,7 +25,7 @@ var (
 		"annotate":           &annotatecmd{},
 		"export":             &exporter{},
 		"export-numpy":       &exportNumpy{},
-		"filter":             &filterer{},
+		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},
 		"pca-go":             &goPCA{},
 		"pca-py":             &pythonPCA{},

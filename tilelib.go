@@ -48,14 +48,16 @@ func (tseq tileSeq) Variants() ([]tileVariantID, int, int) {
 }
 
 type tileLibrary struct {
-	includeNoCalls bool
-	skipOOO        bool
+	includeNoCalls      bool
+	skipOOO             bool
+	retainTileSequences bool
+
 	taglib         *tagLibrary
 	variant        [][][blake2b.Size256]byte
 	refseqs        map[string]map[string][]tileLibRef
 	compactGenomes map[string][]tileVariantID
 	// count [][]int
-	// seq map[[blake2b.Size]byte][]byte
+	seq      map[[blake2b.Size256]byte][]byte
 	variants int
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
@@ -392,9 +394,6 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		}
 	}
 	tilelib.mtx.Lock()
-	// if tilelib.seq == nil {
-	// 	tilelib.seq = map[[blake2b.Size]byte][]byte{}
-	// }
 	if tilelib.variant == nil && tilelib.taglib != nil {
 		tilelib.variant = make([][][blake2b.Size256]byte, tilelib.taglib.Len())
 	}
@@ -423,7 +422,12 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	}
 	tilelib.variants++
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
-	// tilelib.seq[seqhash] = append([]byte(nil), seq...)
+	if tilelib.retainTileSequences {
+		if tilelib.seq == nil {
+			tilelib.seq = map[[blake2b.Size256]byte][]byte{}
+		}
+		tilelib.seq[seqhash] = append([]byte(nil), seq...)
+	}
 	variant := tileVariantID(len(tilelib.variant[tag]))
 	tilelib.mtx.Unlock()
 
@@ -438,6 +442,13 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		})
 	}
 	return tileLibRef{Tag: tag, Variant: variant}
+}
+
+func (tilelib *tileLibrary) TileVariantSequence(libref tileLibRef) []byte {
+	if libref.Variant == 0 || len(tilelib.variant) <= int(libref.Tag) || len(tilelib.variant[libref.Tag]) < int(libref.Variant) {
+		return nil
+	}
+	return tilelib.seq[tilelib.variant[libref.Tag][libref.Variant-1]]
 }
 
 func countBases(seq []byte) int {
