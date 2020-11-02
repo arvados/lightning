@@ -72,7 +72,16 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"export-numpy", "-local=true", fmt.Sprintf("-one-hot=%v", *onehot), "-i", *inputFilename, "-o", "/mnt/output/matrix.npy", "-output-annotations", "/mnt/output/annotations.tsv", "-output-onehot2tilevar", "/mnt/output/onehot2tilevar.tsv"}
+		runner.Args = []string{"export-numpy", "-local=true",
+			fmt.Sprintf("-one-hot=%v", *onehot),
+			"-i", *inputFilename,
+			"-o", "/mnt/output/matrix.npy",
+			"-output-annotations", "/mnt/output/annotations.tsv",
+			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.tsv",
+			"-max-variants", fmt.Sprintf("%d", cmd.filter.MaxVariants),
+			"-min-coverage", fmt.Sprintf("%f", cmd.filter.MinCoverage),
+			"-max-tag", fmt.Sprintf("%d", cmd.filter.MaxTag),
+		}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
