@@ -152,7 +152,7 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 	sort.Strings(refs)
 	log.Infof("len(refs) %d", len(refs))
 
-	outch := make(chan string, 1)
+	outch := make(chan string, runtime.NumCPU()*2)
 	var outwg sync.WaitGroup
 	defer outwg.Wait()
 	outwg.Add(1)
@@ -169,7 +169,7 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 		nseqs += len(refcs)
 	}
 
-	throttle := &throttle{Max: runtime.NumCPU() + nseqs + 1}
+	throttle := &throttle{Max: runtime.NumCPU()*2 + nseqs*2 + 1}
 	defer throttle.Wait()
 
 	for _, refname := range refs {

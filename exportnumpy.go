@@ -126,7 +126,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			return 1
 		}
 		defer annow.Close()
-		err = (&annotatecmd{maxTileSize: 50000}).exportTileDiffs(annow, tilelib)
+		err = (&annotatecmd{maxTileSize: 5000}).exportTileDiffs(annow, tilelib)
 		if err != nil {
 			return 1
 		}
