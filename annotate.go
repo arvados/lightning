@@ -185,7 +185,7 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 			throttle.Acquire()
 			go func() {
 				defer throttle.Release()
-				throttle.Report(cmd.annotateSequence(throttle, outch, tilelib, taglen, refname, seqname, refcs[seqname]))
+				throttle.Report(cmd.annotateSequence(throttle, outch, tilelib, taglen, refname, seqname, refcs[seqname], len(refs) > 1))
 			}()
 		}
 	}
@@ -193,7 +193,7 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 	return throttle.Err()
 }
 
-func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string, tilelib *tileLibrary, taglen int, refname, seqname string, reftiles []tileLibRef) error {
+func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string, tilelib *tileLibrary, taglen int, refname, seqname string, reftiles []tileLibRef, refnamecol bool) error {
 	var refseq []byte
 	// tilestart[123] is the index into refseq
 	// where the tile for tag 123 was placed.
@@ -273,7 +273,11 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 					} else {
 						varid = fmt.Sprintf("%d", variant)
 					}
-					outch <- fmt.Sprintf("%d\t%s\t%s\t%s:g.%s\n", tag, varid, refname, seqname, diff.String())
+					refnamefield := ""
+					if refnamecol {
+						refnamefield = "\t" + refname
+					}
+					outch <- fmt.Sprintf("%d\t%s%s\t%s:g.%s\n", tag, varid, refnamefield, seqname, diff.String())
 				}
 			}()
 		}
