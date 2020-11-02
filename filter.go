@@ -39,7 +39,6 @@ func (f *filter) Apply(tilelib *tileLibrary) {
 			if len(variants) <= f.MaxVariants {
 				continue
 			}
-			tilelib.variant[tag] = nil
 			for _, cg := range tilelib.compactGenomes {
 				if len(cg) > tag*2 {
 					cg[tag*2] = 0
