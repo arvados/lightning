@@ -7,6 +7,8 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -449,6 +451,89 @@ func (tilelib *tileLibrary) TileVariantSequence(libref tileLibRef) []byte {
 		return nil
 	}
 	return tilelib.seq[tilelib.variant[libref.Tag][libref.Variant-1]]
+}
+
+// Tidy deletes unreferenced tile variants and renumbers variants so
+// more common variants have smaller IDs.
+func (tilelib *tileLibrary) Tidy() {
+	log.Print("Tidy: compute inref")
+	inref := map[tileLibRef]bool{}
+	for _, refseq := range tilelib.refseqs {
+		for _, librefs := range refseq {
+			for _, libref := range librefs {
+				inref[libref] = true
+			}
+		}
+	}
+	log.Print("Tidy: compute remap")
+	remap := make([][]tileVariantID, len(tilelib.variant))
+	throttle := throttle{Max: runtime.NumCPU() + 1}
+	for tag, oldvariants := range tilelib.variant {
+		tag, oldvariants := tagID(tag), oldvariants
+		if tag%10000 == 0 {
+			log.Printf("Tidy: tag %d", tag)
+		}
+		throttle.Acquire()
+		go func() {
+			defer throttle.Release()
+			uses := make([]int, len(oldvariants))
+			for _, cg := range tilelib.compactGenomes {
+				for phase := 0; phase < 2; phase++ {
+					cgi := int(tag)*2 + phase
+					if cgi < len(cg) && cg[cgi] > 0 {
+						uses[cg[cgi]-1]++
+					}
+				}
+			}
+
+			// Compute desired order of variants:
+			// neworder[x] == index in oldvariants that
+			// should move to position x.
+			neworder := make([]int, len(oldvariants))
+			for i := range neworder {
+				neworder[i] = i
+			}
+			sort.Slice(neworder, func(i, j int) bool {
+				if cmp := uses[neworder[i]] - uses[neworder[j]]; cmp != 0 {
+					return cmp > 0
+				} else {
+					return bytes.Compare(oldvariants[neworder[i]][:], oldvariants[neworder[j]][:]) < 0
+				}
+			})
+
+			// Replace tilelib.variants[tag] with a new
+			// re-ordered slice of hashes, and make a
+			// mapping from old to new variant IDs.
+			remaptag := make([]tileVariantID, len(oldvariants)+1)
+			newvariants := make([][blake2b.Size256]byte, 0, len(neworder))
+			for _, oldi := range neworder {
+				if uses[oldi] > 0 || inref[tileLibRef{Tag: tag, Variant: tileVariantID(oldi + 1)}] {
+					newvariants = append(newvariants, oldvariants[oldi])
+					remaptag[oldi+1] = tileVariantID(len(newvariants))
+				}
+			}
+			tilelib.variant[tag] = newvariants
+			remap[tag] = remaptag
+		}()
+	}
+	throttle.Wait()
+
+	// Apply remap to genomes and reference sequences, so they
+	// refer to the same tile variants using the changed IDs.
+	log.Print("Tidy: apply remap")
+	for _, cg := range tilelib.compactGenomes {
+		for idx, variant := range cg {
+			cg[idx] = remap[tagID(idx/2)][variant]
+		}
+	}
+	for _, refcs := range tilelib.refseqs {
+		for _, refseq := range refcs {
+			for i, tv := range refseq {
+				refseq[i].Variant = remap[tv.Tag][tv.Variant]
+			}
+		}
+	}
+	log.Print("Tidy: done")
 }
 
 func countBases(seq []byte) int {

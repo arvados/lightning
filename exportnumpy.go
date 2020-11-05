@@ -117,6 +117,8 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 
 	log.Info("filtering")
 	cmd.filter.Apply(tilelib)
+	log.Info("tidying")
+	tilelib.Tidy()
 
 	if *annotationsFilename != "" {
 		log.Infof("writing annotations")
