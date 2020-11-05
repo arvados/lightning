@@ -24,6 +24,7 @@ ref37_lib=$(lightning  import       -project ${project} -priority ${priority} -t
 # 539s
 
 ref38_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -include-no-calls ${ref_fa}) ; echo ref38_lib=${ref38_lib}
+# ref38_lib=su92l-4zz18-swebknshfwsvys6/library.gob
 
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true ${fasta})       ; echo unfiltered=${unfiltered}
 # unfiltered=su92l-4zz18-mz3546bib6oj1gg/library.gob
@@ -47,4 +48,13 @@ plot=$(lightning       plot         -project ${project} -priority ${priority} -i
 echo >&2 "https://workbench2.${plot%%-*}.arvadosapi.com/collections/${plot}"
 echo ${plot%%/*}
 
-numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${merged} -one-hot -max-variants "30" -min-coverage "0.9")
+
+merged38=$(lightning   merge        -project ${project} -priority ${priority} ${unfiltered} ${ref38_lib})                                              ; echo merged38=${merged38}
+# merged38=su92l-4zz18-xq17gtaltjxbm3n/library.gob
+# 1602s
+
+numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${merged38} -max-variants "30" -min-coverage "0.9")                   ; echo numpy=${numpy}
+# numpy=su92l-4zz18-w3dx5k79mtbz6qt/matrix.npy
+# 6155s
+# pcapy=$(lightning      pca          -project ${project} -priority ${priority} -i ${numpy})                                                             ; echo pcapy=${pcapy}
+comvar=$(lightning     numpy-comvar -project ${project} -priority ${priority} -i ${numpy} -annotations ${numpy%/matrix.npy}/annotations.tsv)           ; echo comvar=${comvar}
