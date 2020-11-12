@@ -109,7 +109,7 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 	bufw := bufio.NewWriter(output)
 
 	tilelib := &tileLibrary{
-		includeNoCalls:      true,
+		retainNoCalls:       true,
 		retainTileSequences: true,
 	}
 	err = tilelib.LoadGob(context.Background(), input, nil)
@@ -232,7 +232,9 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 		for variant := 1; variant <= len(tvs); variant++ {
 			variant, hash := tileVariantID(variant), tvs[variant-1]
 			tileseq := tilelib.TileVariantSequence(tileLibRef{Tag: tag, Variant: variant})
-			if len(tileseq) < taglen {
+			if len(tileseq) == 0 {
+				continue
+			} else if len(tileseq) < taglen {
 				return fmt.Errorf("tilevar %d,%d has sequence len %d < taglen %d", tag, variant, len(tileseq), taglen)
 			}
 			var refpart []byte

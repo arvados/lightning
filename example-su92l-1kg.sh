@@ -19,11 +19,11 @@ genome=$(lightning     ref2genome   -project ${project} -priority ${priority} -r
 fasta=$(lightning      vcf2fasta    -project ${project} -priority ${priority} -ref ${ref_fa} -genome ${genome} -mask=true ${gvcf})                     ; echo fasta=${fasta}
 # fasta=su92l-4zz18-9nq05jifgz7iult
 
-ref37_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -include-no-calls ${ref37_fa}) ; echo ref37_lib=${ref37_lib}
+ref37_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -save-incomplete-tiles ${ref37_fa}) ; echo ref37_lib=${ref37_lib}
 # ref37_lib=su92l-4zz18-vnhlv3g6yp1azls/library.gob
 # 539s
 
-ref38_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -include-no-calls ${ref_fa}) ; echo ref38_lib=${ref38_lib}
+ref38_lib=$(lightning  import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true -save-incomplete-tiles ${ref_fa}) ; echo ref38_lib=${ref38_lib}
 # ref38_lib=su92l-4zz18-swebknshfwsvys6/library.gob
 
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true ${fasta})       ; echo unfiltered=${unfiltered}
@@ -36,6 +36,10 @@ merged=$(lightning     merge        -project ${project} -priority ${priority} ${
 exportvcf=$(lightning  export       -project ${project} -priority ${priority} -i ${merged} -output-format vcf -ref /mnt/su92l-4zz18-caw3g2ji89jxix8/human_g1k_v37.fasta.gz -output-bed export.bed) ; echo exportvcf=${exportvcf}
 # exportvcf=su92l-4zz18-gz4svr6zyvipueu/export.csv
 # 5506s
+
+exporthgvs=$(lightning export       -project ${project} -priority ${priority} -i ${merged38} -output-format hgvs -ref /mnt/su92l-4zz18-u77iyyy7cb05xqv/hg38.fa.gz -output-bed hg38.bed) ; echo exporthgvs=${exporthgvs}
+# 
+# 
 
 stats=$(lightning      stats        -project ${project} -priority ${priority} -i ${merged})                                                            ; echo stats=${stats}
 
@@ -58,3 +62,4 @@ numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i
 # 6155s
 # pcapy=$(lightning      pca          -project ${project} -priority ${priority} -i ${numpy})                                                             ; echo pcapy=${pcapy}
 comvar=$(lightning     numpy-comvar -project ${project} -priority ${priority} -i ${numpy} -annotations ${numpy%/matrix.npy}/annotations.tsv)           ; echo comvar=${comvar}
+# comvar=su92l-4zz18-s1yhngobdvcoc2e/commonvariants.csv

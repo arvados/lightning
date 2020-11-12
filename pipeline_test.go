@@ -63,7 +63,7 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 			args := []string{"-local=true", "-o=" + libfile[i], "-skip-ooo=true", "-output-tiles", "-tag-library", "testdata/tags"}
 			if i == 0 {
 				// ref only
-				args = append(args, "-include-no-calls")
+				args = append(args, "-save-incomplete-tiles")
 			}
 			args = append(args, infile)
 			code := (&importer{}).RunCommand("lightning import", args, bytes.NewReader(nil), &bytes.Buffer{}, os.Stderr)
@@ -127,7 +127,7 @@ chr2	471	GG	AA	0/1	0/0
 	bedout, err := ioutil.ReadFile(tmpdir + "/export.bed")
 	c.Check(err, check.IsNil)
 	c.Logf("%s", string(bedout))
-	c.Check(string(bedout), check.Equals, `chr1 0 248 0 500 . 0 224
+	c.Check(string(bedout), check.Equals, `chr1 0 248 0 1000 . 0 224
 chr1 224 372 1 1000 . 248 348
 chr1 348 496 2 1000 . 372 472
 chr1 472 572 3 1000 . 496 572

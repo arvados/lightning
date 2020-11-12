@@ -139,7 +139,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	}
 	log.Print("reading")
 	tilelib := tileLibrary{
-		includeNoCalls: true,
+		retainNoCalls:  true,
 		compactGenomes: map[string][]tileVariantID{},
 	}
 	err = tilelib.LoadGob(context.Background(), input, nil)

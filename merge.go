@@ -127,8 +127,8 @@ func (cmd *merger) doMerge() error {
 
 	cmd.errs = make(chan error, 1)
 	cmd.tilelib = &tileLibrary{
-		encoder:        encoder,
-		includeNoCalls: true,
+		encoder:       encoder,
+		retainNoCalls: true,
 	}
 
 	cmd.mapped = map[string]map[tileLibRef]tileVariantID{}

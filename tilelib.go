@@ -50,7 +50,7 @@ func (tseq tileSeq) Variants() ([]tileVariantID, int, int) {
 }
 
 type tileLibrary struct {
-	includeNoCalls      bool
+	retainNoCalls       bool
 	skipOOO             bool
 	retainTileSequences bool
 
@@ -336,7 +336,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 				basesOut += countBases(job.fasta[last.pos+last.taglen : f.pos+f.taglen])
 			} else {
 				// If we dropped this tile
-				// (because !includeNoCalls),
+				// (because !retainNoCalls),
 				// set taglen=0 so the
 				// overlapping tag is counted
 				// toward coverage on the
@@ -386,12 +386,12 @@ func (tilelib *tileLibrary) Len() int {
 // Return a tileLibRef for a tile with the given tag and sequence,
 // adding the sequence to the library if needed.
 func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
-	if !tilelib.includeNoCalls {
+	dropSeq := false
+	if !tilelib.retainNoCalls {
 		for _, b := range seq {
 			if b != 'a' && b != 'c' && b != 'g' && b != 't' {
-				// return "tile not found" if seq has any
-				// no-calls
-				return tileLibRef{Tag: tag}
+				dropSeq = true
+				break
 			}
 		}
 	}
@@ -424,7 +424,7 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	}
 	tilelib.variants++
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
-	if tilelib.retainTileSequences {
+	if tilelib.retainTileSequences && !dropSeq {
 		if tilelib.seq == nil {
 			tilelib.seq = map[[blake2b.Size256]byte][]byte{}
 		}
@@ -434,12 +434,17 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	tilelib.mtx.Unlock()
 
 	if tilelib.encoder != nil {
+		saveSeq := seq
+		if dropSeq {
+			// Save the hash, but not the sequence
+			saveSeq = nil
+		}
 		tilelib.encoder.Encode(LibraryEntry{
 			TileVariants: []TileVariant{{
 				Tag:      tag,
 				Variant:  variant,
 				Blake2b:  seqhash,
-				Sequence: seq,
+				Sequence: saveSeq,
 			}},
 		})
 	}

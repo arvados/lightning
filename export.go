@@ -132,7 +132,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	var mtx sync.Mutex
 	var cgs []CompactGenome
 	tilelib := tileLibrary{
-		includeNoCalls: true,
+		retainNoCalls: true,
 	}
 	err = tilelib.LoadGob(context.Background(), input, func(cg CompactGenome) {
 		if *pick != "" && *pick != cg.Name {
@@ -336,6 +336,12 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					continue
 				}
 				genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
+				if len(genometile.Sequence) == 0 {
+					// Hash is known but sequence
+					// is not, e.g., retainNoCalls
+					// was false during import
+					continue
+				}
 				refSequence := reftile.Sequence
 				// If needed, extend the reference
 				// sequence up to the tag at the end

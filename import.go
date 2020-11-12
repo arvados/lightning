@@ -32,16 +32,16 @@ import (
 )
 
 type importer struct {
-	tagLibraryFile string
-	refFile        string
-	outputFile     string
-	projectUUID    string
-	runLocal       bool
-	skipOOO        bool
-	outputTiles    bool
-	includeNoCalls bool
-	outputStats    string
-	encoder        *gob.Encoder
+	tagLibraryFile      string
+	refFile             string
+	outputFile          string
+	projectUUID         string
+	runLocal            bool
+	skipOOO             bool
+	outputTiles         bool
+	saveIncompleteTiles bool
+	outputStats         string
+	encoder             *gob.Encoder
 }
 
 func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -60,7 +60,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.BoolVar(&cmd.runLocal, "local", false, "run on local host (default: run in an arvados container)")
 	flags.BoolVar(&cmd.skipOOO, "skip-ooo", false, "skip out-of-order tags")
 	flags.BoolVar(&cmd.outputTiles, "output-tiles", false, "include tile variant sequences in output file")
-	flags.BoolVar(&cmd.includeNoCalls, "include-no-calls", false, "treat tiles with no-calls as regular tiles")
+	flags.BoolVar(&cmd.saveIncompleteTiles, "save-incomplete-tiles", false, "treat tiles with no-calls as regular tiles")
 	flags.StringVar(&cmd.outputStats, "output-stats", "", "output stats to `file` (json)")
 	priority := flags.Int("priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
@@ -96,8 +96,8 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning import",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: cmd.projectUUID,
-			RAM:         60000000000,
-			VCPUs:       16,
+			RAM:         80000000000,
+			VCPUs:       32,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(&cmd.tagLibraryFile, &cmd.refFile, &cmd.outputFile)
@@ -125,7 +125,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			"-loglevel=" + *loglevel,
 			fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO),
 			fmt.Sprintf("-output-tiles=%v", cmd.outputTiles),
-			fmt.Sprintf("-include-no-calls=%v", cmd.includeNoCalls),
+			fmt.Sprintf("-save-incomplete-tiles=%v", cmd.saveIncompleteTiles),
 			"-output-stats", "/mnt/output/stats.json",
 			"-tag-library", cmd.tagLibraryFile,
 			"-ref", cmd.refFile,
@@ -163,7 +163,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	bufw := bufio.NewWriter(output)
 	cmd.encoder = gob.NewEncoder(bufw)
 
-	tilelib := &tileLibrary{taglib: taglib, includeNoCalls: cmd.includeNoCalls, skipOOO: cmd.skipOOO}
+	tilelib := &tileLibrary{taglib: taglib, retainNoCalls: cmd.saveIncompleteTiles, skipOOO: cmd.skipOOO}
 	if cmd.outputTiles {
 		cmd.encoder.Encode(LibraryEntry{TagSet: taglib.Tags()})
 		tilelib.encoder = cmd.encoder

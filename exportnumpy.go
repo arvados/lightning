@@ -102,7 +102,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		defer input.Close()
 	}
 	tilelib := &tileLibrary{
-		includeNoCalls:      true,
+		retainNoCalls:       true,
 		retainTileSequences: true,
 		compactGenomes:      map[string][]tileVariantID{},
 	}
