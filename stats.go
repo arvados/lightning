@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +11,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	log "github.com/sirupsen/logrus"
@@ -101,7 +101,7 @@ func (cmd *statscmd) RunCommand(prog string, args []string, stdin io.Reader, std
 	}
 
 	bufw := bufio.NewWriter(output)
-	err = cmd.doStats(input, bufw)
+	err = cmd.doStats(input, strings.HasSuffix(*inputFilename, ".gz"), bufw)
 	if err != nil {
 		return 1
 	}
@@ -116,7 +116,7 @@ func (cmd *statscmd) RunCommand(prog string, args []string, stdin io.Reader, std
 	return 0
 }
 
-func (cmd *statscmd) doStats(input io.Reader, output io.Writer) error {
+func (cmd *statscmd) doStats(input io.Reader, gz bool, output io.Writer) error {
 	var ret struct {
 		Genomes          int
 		CalledBases      []int64
@@ -131,15 +131,7 @@ func (cmd *statscmd) doStats(input io.Reader, output io.Writer) error {
 	var tagSet [][]byte
 	var tagPlacements []int
 	tileVariantCalls := map[tileLibRef]int{}
-	dec := gob.NewDecoder(bufio.NewReaderSize(input, 1<<26))
-	for {
-		var ent LibraryEntry
-		err := dec.Decode(&ent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return fmt.Errorf("gob decode: %w", err)
-		}
+	err := DecodeLibrary(input, gz, func(ent *LibraryEntry) error {
 		ret.Genomes += len(ent.CompactGenomes)
 		ret.TileVariants += len(ent.TileVariants)
 		if len(ent.TagSet) > 0 {
@@ -186,6 +178,10 @@ func (cmd *statscmd) doStats(input io.Reader, output io.Writer) error {
 			}
 			ret.CalledBases = append(ret.CalledBases, calledBases)
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	for id, p := range tagPlacements {
 		for len(ret.TagsPlacedNTimes) <= p {

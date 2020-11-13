@@ -210,11 +210,11 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 // match.
 //
 // If onLoadGenome is non-nil, call it on each CompactGenome entry.
-func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, onLoadGenome func(CompactGenome)) error {
+func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, gz bool, onLoadGenome func(CompactGenome)) error {
 	cgs := []CompactGenome{}
 	cseqs := []CompactSequence{}
 	variantmap := map[tileLibRef]tileVariantID{}
-	err := DecodeLibrary(rdr, func(ent *LibraryEntry) error {
+	err := DecodeLibrary(rdr, gz, func(ent *LibraryEntry) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

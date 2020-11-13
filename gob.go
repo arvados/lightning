@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/gob"
 	"io"
+	"io/ioutil"
 	_ "net/http/pprof"
 
 	"golang.org/x/crypto/blake2b"
@@ -33,18 +35,25 @@ type LibraryEntry struct {
 	TileVariants     []TileVariant
 }
 
-func ReadCompactGenomes(rdr io.Reader) ([]CompactGenome, error) {
+func ReadCompactGenomes(rdr io.Reader, gz bool) ([]CompactGenome, error) {
 	var ret []CompactGenome
-	err := DecodeLibrary(rdr, func(ent *LibraryEntry) error {
+	err := DecodeLibrary(rdr, gz, func(ent *LibraryEntry) error {
 		ret = append(ret, ent.CompactGenomes...)
 		return nil
 	})
 	return ret, err
 }
 
-func DecodeLibrary(rdr io.Reader, cb func(*LibraryEntry) error) error {
-	dec := gob.NewDecoder(bufio.NewReaderSize(rdr, 1<<26))
+func DecodeLibrary(rdr io.Reader, gz bool, cb func(*LibraryEntry) error) error {
+	zrdr := ioutil.NopCloser(rdr)
 	var err error
+	if gz {
+		zrdr, err = gzip.NewReader(bufio.NewReaderSize(rdr, 1<<26))
+		if err != nil {
+			return err
+		}
+	}
+	dec := gob.NewDecoder(zrdr)
 	for err == nil {
 		var ent LibraryEntry
 		err = dec.Decode(&ent)
@@ -52,9 +61,8 @@ func DecodeLibrary(rdr io.Reader, cb func(*LibraryEntry) error) error {
 			err = cb(&ent)
 		}
 	}
-	if err == io.EOF {
-		return nil
-	} else {
+	if err != io.EOF {
 		return err
 	}
+	return zrdr.Close()
 }

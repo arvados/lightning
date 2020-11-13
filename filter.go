@@ -11,6 +11,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	log "github.com/sirupsen/logrus"
@@ -165,7 +166,7 @@ func (cmd *filtercmd) RunCommand(prog string, args []string, stdin io.Reader, st
 		defer infile.Close()
 	}
 	log.Print("reading")
-	cgs, err := ReadCompactGenomes(infile)
+	cgs, err := ReadCompactGenomes(infile, strings.HasSuffix(*inputFilename, ".gz"))
 	if err != nil {
 		return 1
 	}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/james-bowman/nlp"
@@ -142,7 +143,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		retainNoCalls:  true,
 		compactGenomes: map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, nil)
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
 	if err != nil {
 		return 1
 	}

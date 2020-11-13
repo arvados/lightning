@@ -134,7 +134,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	tilelib := tileLibrary{
 		retainNoCalls: true,
 	}
-	err = tilelib.LoadGob(context.Background(), input, func(cg CompactGenome) {
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), func(cg CompactGenome) {
 		if *pick != "" && *pick != cg.Name {
 			return
 		}
@@ -188,7 +188,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		bedbufw = bufio.NewWriter(bedout)
 	}
 
-	err = cmd.export(bufw, bedout, input, tilelib.taglib.keylen, refseq, cgs)
+	err = cmd.export(bufw, bedout, input, strings.HasSuffix(*inputFilename, ".gz"), tilelib.taglib.keylen, refseq, cgs)
 	if err != nil {
 		return 1
 	}
@@ -217,7 +217,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	return 0
 }
 
-func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
+func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
 	need := map[tileLibRef]bool{}
 	var seqnames []string
 	for seqname, librefs := range refseq {
@@ -242,7 +242,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, taglen int,
 
 	log.Infof("export: loading %d tile variants", len(need))
 	tileVariant := map[tileLibRef]TileVariant{}
-	err := DecodeLibrary(librdr, func(ent *LibraryEntry) error {
+	err := DecodeLibrary(librdr, gz, func(ent *LibraryEntry) error {
 		for _, tv := range ent.TileVariants {
 			libref := tileLibRef{Tag: tv.Tag, Variant: tv.Variant}
 			if need[libref] {

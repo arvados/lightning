@@ -12,6 +12,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"sort"
+	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/kshedden/gonpy"
@@ -106,7 +107,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		retainTileSequences: true,
 		compactGenomes:      map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, nil)
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
 	if err != nil {
 		return 1
 	}

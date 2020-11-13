@@ -112,7 +112,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			}
 		}
 		if cmd.outputFile == "-" {
-			cmd.outputFile = "/mnt/output/library.gob"
+			cmd.outputFile = "/mnt/output/library.gob.gz"
 		} else {
 			// Not yet implemented, but this should write
 			// the collection to an existing collection,
@@ -136,7 +136,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output+"/library.gob")
+		fmt.Fprintln(stdout, output+"/library.gob.gz")
 		return 0
 	}
 
@@ -150,17 +150,22 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 1
 	}
 
-	var output io.WriteCloser
+	var outw, outf io.WriteCloser
 	if cmd.outputFile == "-" {
-		output = nopCloser{stdout}
+		outw = nopCloser{stdout}
 	} else {
-		output, err = os.OpenFile(cmd.outputFile, os.O_CREATE|os.O_WRONLY, 0777)
+		outf, err = os.OpenFile(cmd.outputFile, os.O_CREATE|os.O_WRONLY, 0777)
 		if err != nil {
 			return 1
 		}
-		defer output.Close()
+		defer outf.Close()
+		if strings.HasSuffix(cmd.outputFile, ".gz") {
+			outw = gzip.NewWriter(outf)
+		} else {
+			outw = outf
+		}
 	}
-	bufw := bufio.NewWriter(output)
+	bufw := bufio.NewWriter(outw)
 	cmd.encoder = gob.NewEncoder(bufw)
 
 	tilelib := &tileLibrary{taglib: taglib, retainNoCalls: cmd.saveIncompleteTiles, skipOOO: cmd.skipOOO}
@@ -182,9 +187,15 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	if err != nil {
 		return 1
 	}
-	err = output.Close()
+	err = outw.Close()
 	if err != nil {
 		return 1
+	}
+	if outf != nil && outf != outw {
+		err = outf.Close()
+		if err != nil {
+			return 1
+		}
 	}
 	return 0
 }

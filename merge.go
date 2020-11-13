@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"encoding/gob"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 	"sync"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -79,34 +81,46 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 			}
 		}
 		runner.Args = append([]string{"merge", "-local=true",
-			"-o", "/mnt/output/library.gob",
+			"-o", "/mnt/output/library.gob.gz",
 		}, cmd.inputs...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output+"/library.gob")
+		fmt.Fprintln(stdout, output+"/library.gob.gz")
 		return 0
 	}
 
+	var outf, outw io.WriteCloser
 	if *outputFilename == "-" {
-		cmd.output = nopCloser{stdout}
+		outw = nopCloser{stdout}
 	} else {
-		cmd.output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0777)
+		outf, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0777)
 		if err != nil {
 			return 1
 		}
-		defer cmd.output.Close()
+		defer outf.Close()
+		if strings.HasSuffix(*outputFilename, ".gz") {
+			outw = gzip.NewWriter(outf)
+		} else {
+			outw = outf
+		}
 	}
-
+	cmd.output = outw
 	err = cmd.doMerge()
 	if err != nil {
 		return 1
 	}
-	err = cmd.output.Close()
+	err = outw.Close()
 	if err != nil {
 		return 1
+	}
+	if outf != nil && outf != outw {
+		err = outf.Close()
+		if err != nil {
+			return 1
+		}
 	}
 	return 0
 }
@@ -153,15 +167,9 @@ func (cmd *merger) doMerge() error {
 		go func(input string) {
 			defer wg.Done()
 			log.Printf("%s: reading", input)
-			err := cmd.tilelib.LoadGob(ctx, infile, nil)
+			err := cmd.tilelib.LoadGob(ctx, infile, strings.HasSuffix(input, ".gz"), nil)
 			if err != nil {
 				cmd.setError(fmt.Errorf("%s: load failed: %w", input, err))
-				cancel()
-				return
-			}
-			err = infile.Close()
-			if err != nil {
-				cmd.setError(fmt.Errorf("%s: error closing input file: %w", input, err))
 				cancel()
 				return
 			}
