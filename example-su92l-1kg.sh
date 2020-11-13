@@ -28,6 +28,12 @@ ref38_lib=$(lightning  import       -project ${project} -priority ${priority} -t
 
 unfiltered=$(lightning import       -project ${project} -priority ${priority} -tag-library ${tagset} -skip-ooo=true -output-tiles=true ${fasta})       ; echo unfiltered=${unfiltered}
 # unfiltered=su92l-4zz18-mz3546bib6oj1gg/library.gob
+# unfiltered=su92l-4zz18-72ovi5qrderxudv/library.gob
+# 24674s @ pre-38e6e7c
+# unfiltered=su92l-4zz18-ywhkc1hgdzxwp5u/library.gob
+# 18497s @ 64vcpu bf0968a
+# _____s @ 32vcpu 83983ad
+
 
 merged=$(lightning     merge        -project ${project} -priority ${priority} ${unfiltered} ${ref37_lib})                                              ; echo merged=${merged}
 # merged=su92l-4zz18-svw5xqe5g0ct2v1/library.gob
@@ -56,8 +62,10 @@ echo ${plot%%/*}
 merged38=$(lightning   merge        -project ${project} -priority ${priority} ${unfiltered} ${ref38_lib})                                              ; echo merged38=${merged38}
 # merged38=su92l-4zz18-xq17gtaltjxbm3n/library.gob
 # 1602s
+# merged38=su92l-4zz18-5kcaci3hqzukjv2/library.gob
+# 2815s @ 83983ad
 
-numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${merged38} -max-variants "30" -min-coverage "0.9")                   ; echo numpy=${numpy}
+numpy=$(lightning      export-numpy -project ${project} -priority ${priority} -i ${merged38})                                                          ; echo numpy=${numpy}
 # numpy=su92l-4zz18-w3dx5k79mtbz6qt/matrix.npy
 # 6155s
 # pcapy=$(lightning      pca          -project ${project} -priority ${priority} -i ${numpy})                                                             ; echo pcapy=${pcapy}
