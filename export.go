@@ -405,8 +405,13 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 				thickstart = 0
 			}
 			thickend := refpos
+
 			// coverage score, 0 to 1000
-			score := 1000 * tagcoverage / len(cgs) / 2
+			score := 1000
+			if len(cgs) > 0 {
+				score = 1000 * tagcoverage / len(cgs) / 2
+			}
+
 			fmt.Fprintf(bedw, "%s %d %d %d %d . %d %d\n",
 				seqname, tilestart, tileend,
 				libref.Tag,
