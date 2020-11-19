@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -255,7 +256,7 @@ type importStats struct {
 	DroppedOutOfOrderTiles int
 }
 
-func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq, []importStats, error) {
+func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChromosome *regexp.Regexp) (tileSeq, []importStats, error) {
 	ret := tileSeq{}
 	type jobT struct {
 		label string
@@ -293,7 +294,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 	for job := range todo {
 		if len(job.fasta) == 0 {
 			continue
-		} else if strings.Contains(job.label, "_") {
+		} else if !matchChromosome.MatchString(job.label) {
 			skippedSequences++
 			continue
 		}
@@ -373,7 +374,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader) (tileSeq,
 
 		totalPathLen += len(path)
 	}
-	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences with '_' in name, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
+	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences that did not match chromosome regexp, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
 	return ret, stats, scanner.Err()
 }
 

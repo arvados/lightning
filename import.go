@@ -41,6 +41,7 @@ type importer struct {
 	outputTiles         bool
 	saveIncompleteTiles bool
 	outputStats         string
+	matchChromosome     *regexp.Regexp
 	encoder             *gob.Encoder
 }
 
@@ -62,6 +63,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.BoolVar(&cmd.outputTiles, "output-tiles", false, "include tile variant sequences in output file")
 	flags.BoolVar(&cmd.saveIncompleteTiles, "save-incomplete-tiles", false, "treat tiles with no-calls as regular tiles")
 	flags.StringVar(&cmd.outputStats, "output-stats", "", "output stats to `file` (json)")
+	matchChromosome := flags.String("match-chromosome", "^(chr)?([0-9]+|X|Y|MT?)$", "import chromosomes that match the given `regexp`")
 	priority := flags.Int("priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	loglevel := flags.String("loglevel", "info", "logging threshold (trace, debug, info, warn, error, fatal, or panic)")
@@ -90,6 +92,11 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 2
 	}
 	log.SetLevel(lvl)
+
+	cmd.matchChromosome, err = regexp.Compile(*matchChromosome)
+	if err != nil {
+		return 1
+	}
 
 	if !cmd.runLocal {
 		runner := arvadosContainerRunner{
@@ -214,7 +221,7 @@ func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string) (tileSeq, []
 		}
 		defer input.Close()
 	}
-	return tilelib.TileFasta(infile, input)
+	return tilelib.TileFasta(infile, input, cmd.matchChromosome)
 }
 
 func (cmd *importer) loadTagLibrary() (*tagLibrary, error) {
@@ -480,7 +487,7 @@ func (cmd *importer) tileGVCF(tilelib *tileLibrary, infile string, phase int) (t
 		return
 	}
 	defer consensus.Wait()
-	tileseq, stats, err = tilelib.TileFasta(fmt.Sprintf("%s phase %d", infile, phase+1), stdout)
+	tileseq, stats, err = tilelib.TileFasta(fmt.Sprintf("%s phase %d", infile, phase+1), stdout, cmd.matchChromosome)
 	if err != nil {
 		return
 	}
