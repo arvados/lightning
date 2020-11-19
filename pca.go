@@ -153,7 +153,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	}
 
 	log.Print("converting cgs to array")
-	data, rows, cols := cgs2array(tilelib.compactGenomes)
+	data, rows, cols := cgs2array(&tilelib)
 	if *onehot {
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, _, cols = recodeOnehot(data, cols)
@@ -211,7 +211,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	return 0
 }
 
-func array2matrix(rows, cols int, data []uint16) mat.Matrix {
+func array2matrix(rows, cols int, data []int16) mat.Matrix {
 	floatdata := make([]float64, rows*cols)
 	for i, v := range data {
 		floatdata[i] = float64(v)

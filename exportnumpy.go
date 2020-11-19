@@ -140,7 +140,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	}
 
 	log.Info("building numpy array")
-	out, rows, cols := cgs2array(tilelib.compactGenomes)
+	out, rows, cols := cgs2array(tilelib)
+
+	log.Info("writing numpy file")
 	var output io.WriteCloser
 	if *outputFilename == "-" {
 		output = nopCloser{stdout}
@@ -170,7 +172,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	}
 	log.Info("writing numpy")
 	npw.Shape = []int{rows, cols}
-	npw.WriteUint16(out)
+	npw.WriteInt16(out)
 	err = bufw.Flush()
 	if err != nil {
 		return 1
@@ -197,31 +199,52 @@ func (*exportNumpy) writeLibRefs(fnm string, tilelib *tileLibrary, librefs []til
 	return f.Close()
 }
 
-func cgs2array(cgs map[string][]tileVariantID) (data []uint16, rows, cols int) {
+func cgs2array(tilelib *tileLibrary) (data []int16, rows, cols int) {
 	var cgnames []string
-	for name := range cgs {
+	for name := range tilelib.compactGenomes {
 		cgnames = append(cgnames, name)
 	}
 	sort.Strings(cgnames)
 
-	rows = len(cgs)
-	for _, cg := range cgs {
+	rows = len(tilelib.compactGenomes)
+	for _, cg := range tilelib.compactGenomes {
 		if cols < len(cg) {
 			cols = len(cg)
 		}
 	}
-	data = make([]uint16, rows*cols)
-	for row, name := range cgnames {
-		for i, v := range cgs[name] {
-			data[row*cols+i] = uint16(v)
+
+	// flag low-quality tile variants so we can change to -1 below
+	lowqual := make([]map[tileVariantID]bool, cols/2)
+	for tag, variants := range tilelib.variant {
+		lq := lowqual[tag]
+		for varidx, hash := range variants {
+			if len(tilelib.seq[hash]) == 0 {
+				if lq == nil {
+					lq = map[tileVariantID]bool{}
+					lowqual[tag] = lq
+				}
+				lq[tileVariantID(varidx+1)] = true
+			}
 		}
 	}
+
+	data = make([]int16, rows*cols)
+	for row, name := range cgnames {
+		for i, v := range tilelib.compactGenomes[name] {
+			if v > 0 && lowqual[i/2][v] {
+				data[row*cols+i] = -1
+			} else {
+				data[row*cols+i] = int16(v)
+			}
+		}
+	}
+
 	return
 }
 
-func recodeOnehot(in []uint16, incols int) (out []uint16, librefs []tileLibRef, outcols int) {
+func recodeOnehot(in []int16, incols int) (out []int16, librefs []tileLibRef, outcols int) {
 	rows := len(in) / incols
-	maxvalue := make([]uint16, incols)
+	maxvalue := make([]int16, incols)
 	for row := 0; row < rows; row++ {
 		for col := 0; col < incols; col++ {
 			if v := in[row*incols+col]; maxvalue[col] < v {
@@ -243,7 +266,7 @@ func recodeOnehot(in []uint16, incols int) (out []uint16, librefs []tileLibRef, 
 	}
 	log.Printf("recodeOnehot: dropped %d input cols with zero maxvalue", dropped)
 
-	out = make([]uint16, rows*outcols)
+	out = make([]int16, rows*outcols)
 	for inidx, row := 0, 0; row < rows; row++ {
 		outrow := out[row*outcols:]
 		for col := 0; col < incols; col++ {
