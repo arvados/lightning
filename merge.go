@@ -67,7 +67,7 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 			return 1
 		}
 		runner := arvadosContainerRunner{
-			Name:        "lightning filter",
+			Name:        "lightning merge",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         64000000000,
