@@ -29,6 +29,14 @@ func (f *filter) Flags(flags *flag.FlagSet) {
 	flags.IntVar(&f.MaxTag, "max-tag", -1, "drop tiles with tag ID > `N`")
 }
 
+func (f *filter) Args() []string {
+	return []string{
+		fmt.Sprintf("-max-variants=%d", f.MaxVariants),
+		fmt.Sprintf("-min-coverage=%f", f.MinCoverage),
+		fmt.Sprintf("-max-tag=%d", f.MaxTag),
+	}
+}
+
 func (f *filter) Apply(tilelib *tileLibrary) {
 	// Zero out variants at tile positions that have more than
 	// f.MaxVariants tile variants.

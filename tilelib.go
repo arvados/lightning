@@ -476,7 +476,7 @@ func (tilelib *tileLibrary) Tidy() {
 	throttle := throttle{Max: runtime.NumCPU() + 1}
 	for tag, oldvariants := range tilelib.variant {
 		tag, oldvariants := tagID(tag), oldvariants
-		if tag%10000 == 0 {
+		if tag%1000000 == 0 {
 			log.Printf("Tidy: tag %d", tag)
 		}
 		throttle.Acquire()

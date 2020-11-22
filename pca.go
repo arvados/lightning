@@ -68,7 +68,9 @@ scipy.save(sys.argv[2], PCA(n_components=4).fit_transform(scipy.load(sys.argv[1]
 	return 0
 }
 
-type goPCA struct{}
+type goPCA struct {
+	filter filter
+}
 
 func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
@@ -87,6 +89,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	outputFilename := flags.String("o", "-", "output `file`")
 	components := flags.Int("components", 4, "number of components")
 	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
+	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -119,6 +122,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 			return 1
 		}
 		runner.Args = []string{"pca-go", "-local=true", fmt.Sprintf("-one-hot=%v", *onehot), "-i", *inputFilename, "-o", "/mnt/output/pca.npy"}
+		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -139,7 +143,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		defer input.Close()
 	}
 	log.Print("reading")
-	tilelib := tileLibrary{
+	tilelib := &tileLibrary{
 		retainNoCalls:  true,
 		compactGenomes: map[string][]tileVariantID{},
 	}
@@ -152,8 +156,13 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		return 1
 	}
 
+	log.Info("filtering")
+	cmd.filter.Apply(tilelib)
+	log.Info("tidying")
+	tilelib.Tidy()
+
 	log.Print("converting cgs to array")
-	data, rows, cols := cgs2array(&tilelib)
+	data, rows, cols := cgs2array(tilelib)
 	if *onehot {
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, _, cols = recodeOnehot(data, cols)
