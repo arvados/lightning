@@ -115,6 +115,7 @@ func (cmd *ref2genome) RunCommand(prog string, args []string, stdin io.Reader, s
 				fmt.Fprintf(out, "%s\t%d\n", label, seqlen)
 			}
 			label = strings.TrimSpace(string(buf[1:]))
+			label = strings.SplitN(label, " ", 2)[0]
 			seqlen = 0
 		} else {
 			seqlen += len(bytes.TrimSpace(buf))
