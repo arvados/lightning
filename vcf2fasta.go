@@ -32,6 +32,7 @@ type vcf2fasta struct {
 	mask              bool
 	gvcfRegionsPy     string
 	gvcfRegionsPyData []byte
+	gvcfType          string
 	projectUUID       string
 	outputDir         string
 	runLocal          bool
@@ -53,6 +54,7 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 	flags.StringVar(&cmd.genomeFile, "genome", "", "reference genome `file`")
 	flags.BoolVar(&cmd.mask, "mask", false, "mask uncalled regions (default: output hom ref)")
 	flags.StringVar(&cmd.gvcfRegionsPy, "gvcf-regions.py", "https://raw.githubusercontent.com/lijiayong/gvcf_regions/master/gvcf_regions.py", "source of gvcf_regions.py")
+	flags.StringVar(&cmd.gvcfType, "gvcf-type", "gatk", "gvcf_type argument to gvcf_regions.py: gatk, complete_genomics, freebayes")
 	flags.StringVar(&cmd.projectUUID, "project", "", "project `UUID` for containers and output data")
 	flags.StringVar(&cmd.outputDir, "output-dir", "", "output directory")
 	flags.IntVar(&cmd.vcpus, "vcpus", 0, "number of VCPUs to request for arvados container (default: 2*number of input files, max 32)")
@@ -135,6 +137,7 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 			"-ref", cmd.refFile, fmt.Sprintf("-mask=%v", cmd.mask),
 			"-genome", cmd.genomeFile,
 			"-gvcf-regions.py", "/gvcf_regions.py",
+			"-gvcf-type", cmd.gvcfType,
 			"-output-dir", "/mnt/output"}, inputs...)
 		var output string
 		output, err = runner.Run()
@@ -265,7 +268,7 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 			return fmt.Errorf("error scanning input file %q: %s", infile, err)
 		}
 		var regions bytes.Buffer
-		bedargs := []string{"python2", "-", "--gvcf_type", "gatk", infile}
+		bedargs := []string{"python2", "-", "--gvcf_type", cmd.gvcfType, infile}
 		bed := exec.CommandContext(ctx, bedargs[0], bedargs[1:]...)
 		bed.Stdin = bytes.NewBuffer(cmd.gvcfRegionsPyData)
 		bed.Stdout = &regions
