@@ -179,6 +179,7 @@ reconnect:
 type arvadosContainerRunner struct {
 	Client      *arvados.Client
 	Name        string
+	OutputName  string
 	ProjectUUID string
 	VCPUs       int
 	RAM         int64
@@ -226,6 +227,10 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 		RAM:          runner.RAM,
 		KeepCacheRAM: (1 << 26) * 2 * int64(runner.VCPUs),
 	}
+	outname := &runner.OutputName
+	if *outname == "" {
+		outname = nil
+	}
 	var cr arvados.ContainerRequest
 	err := runner.Client.RequestAndDecode(&cr, "POST", "arvados/v1/container_requests", nil, map[string]interface{}{
 		"container_request": map[string]interface{}{
@@ -236,6 +241,7 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 			"mounts":              mounts,
 			"use_existing":        true,
 			"output_path":         "/mnt/output",
+			"output_name":         outname,
 			"runtime_constraints": rc,
 			"priority":            runner.Priority,
 			"state":               arvados.ContainerRequestStateCommitted,
