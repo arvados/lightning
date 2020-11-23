@@ -133,6 +133,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 			fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO),
 			fmt.Sprintf("-output-tiles=%v", cmd.outputTiles),
 			fmt.Sprintf("-save-incomplete-tiles=%v", cmd.saveIncompleteTiles),
+			"-match-chromosome", cmd.matchChromosome.String(),
 			"-output-stats", "/mnt/output/stats.json",
 			"-tag-library", cmd.tagLibraryFile,
 			"-ref", cmd.refFile,
