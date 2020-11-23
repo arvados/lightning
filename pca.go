@@ -113,8 +113,8 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 			Name:        "lightning pca-go",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         100000000000, // maybe 10x input size?
-			VCPUs:       2,
+			RAM:         300000000000, // maybe 10x input size?
+			VCPUs:       16,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(inputFilename)
@@ -167,6 +167,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, _, cols = recodeOnehot(data, cols)
 	}
+	tilelib = nil
 
 	log.Printf("creating matrix backed by array: %d rows, %d cols", rows, cols)
 	mtx := array2matrix(rows, cols, data).T()
