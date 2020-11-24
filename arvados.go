@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -190,6 +191,10 @@ type arvadosContainerRunner struct {
 }
 
 func (runner *arvadosContainerRunner) Run() (string, error) {
+	return runner.RunContext(context.Background())
+}
+
+func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, error) {
 	if runner.ProjectUUID == "" {
 		return "", errors.New("cannot run arvados container: ProjectUUID not provided")
 	}
@@ -293,8 +298,19 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 	}
 
 	var reCrunchstat = regexp.MustCompile(`mem .* rss`)
+waitctr:
 	for cr.State != arvados.ContainerRequestStateFinal {
 		select {
+		case <-ctx.Done():
+			err := runner.Client.RequestAndDecode(&cr, "PATCH", "arvados/v1/container_requests/"+cr.UUID, nil, map[string]interface{}{
+				"container_request": map[string]interface{}{
+					"priority": 0,
+				},
+			})
+			if err != nil {
+				log.Errorf("error while trying to cancel container request %s: %s", cr.UUID, err)
+			}
+			break waitctr
 		case <-ticker.C:
 			refreshCR()
 		case msg := <-logch:
@@ -321,6 +337,10 @@ func (runner *arvadosContainerRunner) Run() (string, error) {
 		}
 	}
 	fmt.Fprint(os.Stderr, neednewline)
+
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 
 	var c arvados.Container
 	err = runner.Client.RequestAndDecode(&c, "GET", "arvados/v1/containers/"+cr.ContainerUUID, nil, nil)
@@ -362,7 +382,11 @@ func (runner *arvadosContainerRunner) TranslatePaths(paths ...*string) error {
 	return nil
 }
 
+var mtxMakeCommandCollection sync.Mutex
+
 func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
+	mtxMakeCommandCollection.Lock()
+	defer mtxMakeCommandCollection.Unlock()
 	exe, err := ioutil.ReadFile("/proc/self/exe")
 	if err != nil {
 		return "", err

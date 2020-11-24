@@ -37,6 +37,7 @@ type vcf2fasta struct {
 	outputDir         string
 	runLocal          bool
 	vcpus             int
+	batchArgs
 
 	stderr io.Writer
 }
@@ -59,6 +60,7 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 	flags.StringVar(&cmd.outputDir, "output-dir", "", "output directory")
 	flags.IntVar(&cmd.vcpus, "vcpus", 0, "number of VCPUs to request for arvados container (default: 2*number of input files, max 32)")
 	flags.BoolVar(&cmd.runLocal, "local", false, "run on local host (default: run in an arvados container)")
+	cmd.batchArgs.Flags(flags)
 	priority := flags.Int("priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	err = flags.Parse(args)
@@ -100,13 +102,14 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 			if err != nil {
 				return 1
 			}
-			if cmd.vcpus = len(infiles) * 2; cmd.vcpus > 32 {
+			if cmd.vcpus = len(cmd.batchArgs.Slice(infiles)) * 2; cmd.vcpus > 32 {
 				cmd.vcpus = 32
 			}
 		}
+		client := arvados.NewClientFromEnv()
 		runner := arvadosContainerRunner{
 			Name:        "lightning vcf2fasta",
-			Client:      arvados.NewClientFromEnv(),
+			Client:      client,
 			ProjectUUID: cmd.projectUUID,
 			RAM:         2<<30 + int64(cmd.vcpus)<<28,
 			VCPUs:       cmd.vcpus,
@@ -117,9 +120,6 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 					"content": string(cmd.gvcfRegionsPyData),
 				},
 			},
-		}
-		if cmd.mask {
-			runner.RAM += int64(cmd.vcpus) << 31
 		}
 		err = runner.TranslatePaths(&cmd.refFile, &cmd.genomeFile)
 		if err != nil {
@@ -132,19 +132,29 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 				return 1
 			}
 		}
-		runner.Args = append([]string{"vcf2fasta",
-			"-local=true",
-			"-ref", cmd.refFile, fmt.Sprintf("-mask=%v", cmd.mask),
-			"-genome", cmd.genomeFile,
-			"-gvcf-regions.py", "/gvcf_regions.py",
-			"-gvcf-type", cmd.gvcfType,
-			"-output-dir", "/mnt/output"}, inputs...)
-		var output string
-		output, err = runner.Run()
+		var outputs []string
+		outputs, err = cmd.batchArgs.RunBatches(context.Background(), func(ctx context.Context, batch int) (string, error) {
+			runner := runner
+			if cmd.mask {
+				runner.RAM += int64(cmd.vcpus) << 31
+			}
+			runner.Args = []string{"vcf2fasta",
+				"-local=true",
+				"-ref", cmd.refFile, fmt.Sprintf("-mask=%v", cmd.mask),
+				"-genome", cmd.genomeFile,
+				"-gvcf-regions.py", "/gvcf_regions.py",
+				"-gvcf-type", cmd.gvcfType,
+				"-output-dir", "/mnt/output",
+			}
+			runner.Args = append(runner.Args, cmd.batchArgs.Args(batch)...)
+			runner.Args = append(runner.Args, inputs...)
+			log.Printf("batch %d: %v", batch, runner.Args)
+			return runner.RunContext(ctx)
+		})
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output)
+		fmt.Fprintln(stdout, strings.Join(outputs, " "))
 		return 0
 	}
 
@@ -152,6 +162,7 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 	if err != nil {
 		return 1
 	}
+	infiles = cmd.batchArgs.Slice(infiles)
 
 	type job struct {
 		vcffile string

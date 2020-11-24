@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,8 @@ type importer struct {
 	refFile             string
 	outputFile          string
 	projectUUID         string
+	loglevel            string
+	priority            int
 	runLocal            bool
 	skipOOO             bool
 	outputTiles         bool
@@ -43,6 +46,7 @@ type importer struct {
 	outputStats         string
 	matchChromosome     *regexp.Regexp
 	encoder             *gob.Encoder
+	batchArgs
 }
 
 func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -63,10 +67,11 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.BoolVar(&cmd.outputTiles, "output-tiles", false, "include tile variant sequences in output file")
 	flags.BoolVar(&cmd.saveIncompleteTiles, "save-incomplete-tiles", false, "treat tiles with no-calls as regular tiles")
 	flags.StringVar(&cmd.outputStats, "output-stats", "", "output stats to `file` (json)")
+	cmd.batchArgs.Flags(flags)
 	matchChromosome := flags.String("match-chromosome", "^(chr)?([0-9]+|X|Y|MT?)$", "import chromosomes that match the given `regexp`")
-	priority := flags.Int("priority", 500, "container request priority")
+	flags.IntVar(&cmd.priority, "priority", 500, "container request priority")
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
-	loglevel := flags.String("loglevel", "info", "logging threshold (trace, debug, info, warn, error, fatal, or panic)")
+	flags.StringVar(&cmd.loglevel, "loglevel", "info", "logging threshold (trace, debug, info, warn, error, fatal, or panic)")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -87,7 +92,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		}()
 	}
 
-	lvl, err := log.ParseLevel(*loglevel)
+	lvl, err := log.ParseLevel(cmd.loglevel)
 	if err != nil {
 		return 2
 	}
@@ -99,52 +104,10 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	}
 
 	if !cmd.runLocal {
-		runner := arvadosContainerRunner{
-			Name:        "lightning import",
-			Client:      arvados.NewClientFromEnv(),
-			ProjectUUID: cmd.projectUUID,
-			RAM:         80000000000,
-			VCPUs:       32,
-			Priority:    *priority,
-		}
-		err = runner.TranslatePaths(&cmd.tagLibraryFile, &cmd.refFile, &cmd.outputFile)
+		err = cmd.runBatches(stdout, flags.Args())
 		if err != nil {
 			return 1
 		}
-		inputs := flags.Args()
-		for i := range inputs {
-			err = runner.TranslatePaths(&inputs[i])
-			if err != nil {
-				return 1
-			}
-		}
-		if cmd.outputFile == "-" {
-			cmd.outputFile = "/mnt/output/library.gob.gz"
-		} else {
-			// Not yet implemented, but this should write
-			// the collection to an existing collection,
-			// possibly even an in-place update.
-			err = errors.New("cannot specify output file in container mode: not implemented")
-			return 1
-		}
-		runner.Args = append([]string{"import",
-			"-local=true",
-			"-loglevel=" + *loglevel,
-			fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO),
-			fmt.Sprintf("-output-tiles=%v", cmd.outputTiles),
-			fmt.Sprintf("-save-incomplete-tiles=%v", cmd.saveIncompleteTiles),
-			"-match-chromosome", cmd.matchChromosome.String(),
-			"-output-stats", "/mnt/output/stats.json",
-			"-tag-library", cmd.tagLibraryFile,
-			"-ref", cmd.refFile,
-			"-o", cmd.outputFile,
-		}, inputs...)
-		var output string
-		output, err = runner.Run()
-		if err != nil {
-			return 1
-		}
-		fmt.Fprintln(stdout, output+"/library.gob.gz")
 		return 0
 	}
 
@@ -152,6 +115,7 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 	if err != nil {
 		return 1
 	}
+	infiles = cmd.batchArgs.Slice(infiles)
 
 	taglib, err := cmd.loadTagLibrary()
 	if err != nil {
@@ -206,6 +170,65 @@ func (cmd *importer) RunCommand(prog string, args []string, stdin io.Reader, std
 		}
 	}
 	return 0
+}
+
+func (cmd *importer) runBatches(stdout io.Writer, inputs []string) error {
+	if cmd.outputFile != "-" {
+		// Not yet implemented, but this should write
+		// the collection to an existing collection,
+		// possibly even an in-place update.
+		return errors.New("cannot specify output file in container mode: not implemented")
+	}
+	client := arvados.NewClientFromEnv()
+	runner := arvadosContainerRunner{
+		Name:        "lightning import",
+		Client:      client,
+		ProjectUUID: cmd.projectUUID,
+		RAM:         80000000000,
+		VCPUs:       32,
+		Priority:    cmd.priority,
+	}
+	err := runner.TranslatePaths(&cmd.tagLibraryFile, &cmd.refFile, &cmd.outputFile)
+	if err != nil {
+		return err
+	}
+	for i := range inputs {
+		err = runner.TranslatePaths(&inputs[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	outputs, err := cmd.batchArgs.RunBatches(context.Background(), func(ctx context.Context, batch int) (string, error) {
+		runner := runner
+		if cmd.batches > 1 {
+			runner.Name += fmt.Sprintf(" (batch %d of %d)", batch, cmd.batches)
+		}
+		runner.Args = []string{"import",
+			"-local=true",
+			"-loglevel=" + cmd.loglevel,
+			fmt.Sprintf("-skip-ooo=%v", cmd.skipOOO),
+			fmt.Sprintf("-output-tiles=%v", cmd.outputTiles),
+			fmt.Sprintf("-save-incomplete-tiles=%v", cmd.saveIncompleteTiles),
+			"-match-chromosome", cmd.matchChromosome.String(),
+			"-output-stats", "/mnt/output/stats.json",
+			"-tag-library", cmd.tagLibraryFile,
+			"-ref", cmd.refFile,
+			"-o", "/mnt/output/library.gob.gz",
+		}
+		runner.Args = append(runner.Args, cmd.batchArgs.Args(batch)...)
+		runner.Args = append(runner.Args, inputs...)
+		return runner.RunContext(ctx)
+	})
+	if err != nil {
+		return err
+	}
+	var outfiles []string
+	for _, o := range outputs {
+		outfiles = append(outfiles, o+"/library.gob.gz")
+	}
+	fmt.Fprintln(stdout, strings.Join(outfiles, " "))
+	return nil
 }
 
 func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string) (tileSeq, []importStats, error) {
