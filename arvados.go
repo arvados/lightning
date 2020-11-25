@@ -177,6 +177,8 @@ reconnect:
 	}
 }
 
+var refreshTicker = time.NewTicker(5 * time.Second)
+
 type arvadosContainerRunner struct {
 	Client      *arvados.Client
 	Name        string
@@ -268,9 +270,6 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 		}
 	}()
 
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
 	neednewline := ""
 
 	lastState := cr.State
@@ -311,7 +310,7 @@ waitctr:
 				log.Errorf("error while trying to cancel container request %s: %s", cr.UUID, err)
 			}
 			break waitctr
-		case <-ticker.C:
+		case <-refreshTicker.C:
 			refreshCR()
 		case msg := <-logch:
 			switch msg.EventType {
