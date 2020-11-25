@@ -102,7 +102,8 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 			if err != nil {
 				return 1
 			}
-			if cmd.vcpus = len(cmd.batchArgs.Slice(infiles)) * 2; cmd.vcpus > 32 {
+			batchsize := (len(infiles) + cmd.batchArgs.batches - 1) / cmd.batchArgs.batches
+			if cmd.vcpus = batchsize * 2; cmd.vcpus > 32 {
 				cmd.vcpus = 32
 			}
 		}
