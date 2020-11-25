@@ -38,8 +38,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	priority := flags.Int("priority", 500, "container request priority")
 	inputFilename := flags.String("i", "-", "input `file`")
 	outputFilename := flags.String("o", "-", "output `file`")
-	annotationsFilename := flags.String("output-annotations", "", "output `file` for tile variant annotations tsv")
-	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create tsv `file` mapping column# to tag# and variant#")
+	annotationsFilename := flags.String("output-annotations", "", "output `file` for tile variant annotations csv")
+	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create csv `file` mapping column# to tag# and variant#")
+	labelsFilename := flags.String("output-labels", "", "output `file` for genome labels csv")
 	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
 	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
@@ -77,8 +78,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			fmt.Sprintf("-one-hot=%v", *onehot),
 			"-i", *inputFilename,
 			"-o", "/mnt/output/matrix.npy",
-			"-output-annotations", "/mnt/output/annotations.tsv",
-			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.tsv",
+			"-output-annotations", "/mnt/output/annotations.csv",
+			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.csv",
+			"-output-labels", "/mnt/output/labels.csv",
 			"-max-variants", fmt.Sprintf("%d", cmd.filter.MaxVariants),
 			"-min-coverage", fmt.Sprintf("%f", cmd.filter.MinCoverage),
 			"-max-tag", fmt.Sprintf("%d", cmd.filter.MaxTag),
@@ -140,7 +142,29 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	}
 
 	log.Info("building numpy array")
-	out, rows, cols := cgs2array(tilelib)
+	out, rows, cols, names := cgs2array(tilelib)
+
+	if *labelsFilename != "" {
+		log.Infof("writing labels to %s", *labelsFilename)
+		var f *os.File
+		f, err = os.OpenFile(*labelsFilename, os.O_CREATE|os.O_WRONLY, 0777)
+		if err != nil {
+			return 1
+		}
+		defer f.Close()
+		for i, name := range names {
+			_, err = fmt.Fprintf(f, "%d,%q\n", i, trimFilenameForLabel(name))
+			if err != nil {
+				err = fmt.Errorf("write %s: %w", *labelsFilename, err)
+				return 1
+			}
+		}
+		err = f.Close()
+		if err != nil {
+			err = fmt.Errorf("close %s: %w", *labelsFilename, err)
+			return 1
+		}
+	}
 
 	log.Info("writing numpy file")
 	var output io.WriteCloser
@@ -191,7 +215,7 @@ func (*exportNumpy) writeLibRefs(fnm string, tilelib *tileLibrary, librefs []til
 	}
 	defer f.Close()
 	for i, libref := range librefs {
-		_, err = fmt.Fprintf(f, "%d\t%d\t%d\n", i, libref.Tag, libref.Variant)
+		_, err = fmt.Fprintf(f, "%d,%d,%d\n", i, libref.Tag, libref.Variant)
 		if err != nil {
 			return err
 		}
@@ -199,8 +223,7 @@ func (*exportNumpy) writeLibRefs(fnm string, tilelib *tileLibrary, librefs []til
 	return f.Close()
 }
 
-func cgs2array(tilelib *tileLibrary) (data []int16, rows, cols int) {
-	var cgnames []string
+func cgs2array(tilelib *tileLibrary) (data []int16, rows, cols int, cgnames []string) {
 	for name := range tilelib.compactGenomes {
 		cgnames = append(cgnames, name)
 	}
@@ -284,3 +307,17 @@ type nopCloser struct {
 }
 
 func (nopCloser) Close() error { return nil }
+
+func trimFilenameForLabel(s string) string {
+	if i := strings.LastIndex(s, "/"); i >= 0 {
+		s = s[i+1:]
+	}
+	s = strings.TrimSuffix(s, ".gz")
+	s = strings.TrimSuffix(s, ".fa")
+	s = strings.TrimSuffix(s, ".fasta")
+	s = strings.TrimSuffix(s, ".1")
+	s = strings.TrimSuffix(s, ".2")
+	s = strings.TrimSuffix(s, ".gz")
+	s = strings.TrimSuffix(s, ".vcf")
+	return s
+}

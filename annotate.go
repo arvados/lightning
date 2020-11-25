@@ -75,13 +75,13 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 		if err != nil {
 			return 1
 		}
-		runner.Args = []string{"annotate", "-local=true", fmt.Sprintf("-variant-hash=%v", cmd.variantHash), "-max-tile-size", strconv.Itoa(cmd.maxTileSize), "-i", *inputFilename, "-o", "/mnt/output/tilevariants.tsv"}
+		runner.Args = []string{"annotate", "-local=true", fmt.Sprintf("-variant-hash=%v", cmd.variantHash), "-max-tile-size", strconv.Itoa(cmd.maxTileSize), "-i", *inputFilename, "-o", "/mnt/output/tilevariants.csv"}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output+"/tilevariants.tsv")
+		fmt.Fprintln(stdout, output+"/tilevariants.csv")
 		return 0
 	}
 
@@ -277,9 +277,9 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 					}
 					refnamefield := ""
 					if refnamecol {
-						refnamefield = "\t" + refname
+						refnamefield = "," + trimFilenameForLabel(refname)
 					}
-					outch <- fmt.Sprintf("%d\t%s%s\t%s:g.%s\n", tag, varid, refnamefield, seqname, diff.String())
+					outch <- fmt.Sprintf("%d,%s%s,%s:g.%s\n", tag, varid, refnamefield, seqname, diff.String())
 				}
 			}()
 		}
