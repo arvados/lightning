@@ -236,7 +236,8 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 		return fmt.Errorf("error opening output file: %s", err)
 	}
 	defer outf.Close()
-	gzipw := gzip.NewWriter(outf)
+	bufw := bufio.NewWriterSize(outf, 8*1024*1024)
+	gzipw := gzip.NewWriter(bufw)
 	defer gzipw.Close()
 
 	var maskfifo string // filename of mask fifo if we're running bedtools, otherwise ""
@@ -419,7 +420,13 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 			errs <- fmt.Errorf("bcftools consensus: %s", err)
 			return
 		}
+		log.Printf("exited %v", consensus.Args)
 		err = gzipw.Close()
+		if err != nil {
+			errs <- err
+			return
+		}
+		err = bufw.Flush()
 		if err != nil {
 			errs <- err
 			return
