@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
@@ -61,11 +62,12 @@ type tileLibrary struct {
 	compactGenomes map[string][]tileVariantID
 	// count [][]int
 	seq      map[[blake2b.Size256]byte][]byte
-	variants int
+	variants int64
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
 
-	mtx sync.Mutex
+	mtx   sync.RWMutex
+	vlock []sync.Locker
 }
 
 func (tilelib *tileLibrary) loadTagSet(newtagset [][]byte) error {
@@ -378,10 +380,8 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 	return ret, stats, scanner.Err()
 }
 
-func (tilelib *tileLibrary) Len() int {
-	tilelib.mtx.Lock()
-	defer tilelib.mtx.Unlock()
-	return tilelib.variants
+func (tilelib *tileLibrary) Len() int64 {
+	return atomic.LoadInt64(&tilelib.variants)
 }
 
 // Return a tileLibRef for a tile with the given tag and sequence,
@@ -396,34 +396,69 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 			}
 		}
 	}
-	tilelib.mtx.Lock()
-	if tilelib.variant == nil && tilelib.taglib != nil {
-		tilelib.variant = make([][][blake2b.Size256]byte, tilelib.taglib.Len())
-	}
-	if int(tag) >= len(tilelib.variant) {
-		// If we haven't seen the tag library yet (as in a
-		// merge), tilelib.taglib.Len() is zero. We can still
-		// behave correctly, we just need to expand the
-		// tilelib.variant slice as needed.
-		if int(tag) >= cap(tilelib.variant) {
-			// Allocate 2x capacity.
-			newslice := make([][][blake2b.Size256]byte, int(tag)+1, (int(tag)+1)*2)
-			copy(newslice, tilelib.variant)
-			tilelib.variant = newslice[:int(tag)+1]
-		} else {
-			// Use previously allocated capacity, avoiding
-			// copy.
-			tilelib.variant = tilelib.variant[:int(tag)+1]
+	seqhash := blake2b.Sum256(seq)
+	tilelib.mtx.RLock()
+	if int(tag) < len(tilelib.variant) {
+		for i, varhash := range tilelib.variant[tag] {
+			if varhash == seqhash {
+				tilelib.mtx.RUnlock()
+				return tileLibRef{Tag: tag, Variant: tileVariantID(i + 1)}
+			}
 		}
 	}
-	seqhash := blake2b.Sum256(seq)
+	var vlock sync.Locker
+	if len(tilelib.vlock) > int(tag) {
+		vlock = tilelib.vlock[tag]
+	}
+	tilelib.mtx.RUnlock()
+	if vlock == nil {
+		tilelib.mtx.Lock()
+		if tilelib.variant == nil && tilelib.taglib != nil {
+			tilelib.variant = make([][][blake2b.Size256]byte, tilelib.taglib.Len())
+			tilelib.vlock = make([]sync.Locker, tilelib.taglib.Len())
+			for i := range tilelib.vlock {
+				tilelib.vlock[i] = &sync.Mutex{}
+			}
+		}
+		if int(tag) >= len(tilelib.variant) {
+			oldlen := len(tilelib.variant)
+			// If we haven't seen the tag library yet (as
+			// in a merge), tilelib.taglib.Len() is
+			// zero. We can still behave correctly, we
+			// just need to expand the tilelib.variant
+			// slice as needed.
+			if int(tag) >= cap(tilelib.variant) {
+				// Allocate 2x capacity.
+				newslice := make([][][blake2b.Size256]byte, int(tag)+1, (int(tag)+1)*2)
+				copy(newslice, tilelib.variant)
+				tilelib.variant = newslice[:int(tag)+1]
+				newvlock := make([]sync.Locker, int(tag)+1, (int(tag)+1)*2)
+				copy(newvlock, tilelib.vlock)
+				tilelib.vlock = newvlock[:int(tag)+1]
+			} else {
+				// Use previously allocated capacity,
+				// avoiding copy.
+				tilelib.variant = tilelib.variant[:int(tag)+1]
+				tilelib.vlock = tilelib.vlock[:int(tag)+1]
+			}
+			for i := oldlen; i < len(tilelib.variant); i++ {
+				tilelib.vlock[i] = &sync.Mutex{}
+			}
+		}
+		vlock = tilelib.vlock[tag]
+		tilelib.mtx.Unlock()
+	}
+
+	tilelib.mtx.RLock()
+	vlock.Lock()
 	for i, varhash := range tilelib.variant[tag] {
 		if varhash == seqhash {
-			tilelib.mtx.Unlock()
+			vlock.Unlock()
+			tilelib.mtx.RUnlock()
 			return tileLibRef{Tag: tag, Variant: tileVariantID(i + 1)}
 		}
 	}
-	tilelib.variants++
+	atomic.AddInt64(&tilelib.variants, 1)
 	tilelib.variant[tag] = append(tilelib.variant[tag], seqhash)
 	if tilelib.retainTileSequences && !dropSeq {
 		if tilelib.seq == nil {
@@ -432,7 +467,8 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		tilelib.seq[seqhash] = append([]byte(nil), seq...)
 	}
 	variant := tileVariantID(len(tilelib.variant[tag]))
-	tilelib.mtx.Unlock()
+	vlock.Unlock()
+	tilelib.mtx.RUnlock()
 
 	if tilelib.encoder != nil {
 		saveSeq := seq
@@ -507,7 +543,7 @@ func (tilelib *tileLibrary) Tidy() {
 				}
 			})
 
-			// Replace tilelib.variants[tag] with a new
+			// Replace tilelib.variant[tag] with a new
 			// re-ordered slice of hashes, and make a
 			// mapping from old to new variant IDs.
 			remaptag := make([]tileVariantID, len(oldvariants)+1)
