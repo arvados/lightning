@@ -264,7 +264,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		label string
 		fasta []byte
 	}
-	todo := make(chan jobT)
+	todo := make(chan jobT, 1)
 	scanner := bufio.NewScanner(rdr)
 	go func() {
 		defer close(todo)
@@ -273,8 +273,8 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		for scanner.Scan() {
 			buf := scanner.Bytes()
 			if len(buf) > 0 && buf[0] == '>' {
-				todo <- jobT{seqlabel, fasta}
-				seqlabel, fasta = strings.SplitN(string(buf[1:]), " ", 2)[0], nil
+				todo <- jobT{seqlabel, append([]byte(nil), fasta...)}
+				seqlabel, fasta = strings.SplitN(string(buf[1:]), " ", 2)[0], fasta[:0]
 				log.Debugf("%s %s reading fasta", filelabel, seqlabel)
 			} else {
 				fasta = append(fasta, bytes.ToLower(buf)...)
@@ -292,7 +292,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 	totalFoundTags := 0
 	totalPathLen := 0
 	skippedSequences := 0
-	stats := make([]importStats, 0, len(todo))
+	var stats []importStats
 	for job := range todo {
 		if len(job.fasta) == 0 {
 			continue
