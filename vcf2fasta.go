@@ -282,8 +282,13 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 		if err = scanner.Err(); err != nil {
 			return fmt.Errorf("error scanning input file %q: %s", infile, err)
 		}
+
 		var regions bytes.Buffer
-		bedargs := []string{"python2", "-", "--gvcf_type", cmd.gvcfType, infile}
+		bedargs := []string{"python2", "-"}
+		if cmd.gvcfType != "" {
+			bedargs = append(bedargs, "--gvcf_type", cmd.gvcfType)
+		}
+		bedargs = append(bedargs, infile)
 		bed := exec.CommandContext(ctx, bedargs[0], bedargs[1:]...)
 		bed.Stdin = bytes.NewBuffer(cmd.gvcfRegionsPyData)
 		bed.Stdout = &regions
