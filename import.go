@@ -452,6 +452,13 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 		}()
 	}
 	tileJobs.Wait()
+	if len(errs) > 0 {
+		// Must not wait on encodeJobs in this case. If the
+		// tileJobs goroutines exited early, some funcs in
+		// todo haven't been called, so the corresponding
+		// encodeJobs will wait forever.
+		return <-errs
+	}
 	encodeJobs.Wait()
 
 	go close(errs)
