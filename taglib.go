@@ -69,6 +69,10 @@ func (taglib *tagLibrary) Len() int {
 	return len(taglib.tagmap)
 }
 
+func (taglib *tagLibrary) TagLen() int {
+	return taglib.keylen
+}
+
 var (
 	twobit = func() []tagmapKey {
 		r := make([]tagmapKey, 256)

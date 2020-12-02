@@ -11,8 +11,9 @@ require (
 	github.com/gonum/internal v0.0.0-20181124074243-f884aa714029 // indirect
 	github.com/james-bowman/nlp v0.0.0-20200417075118-1e2772e0e1e5
 	github.com/james-bowman/sparse v0.0.0-20200514124614-ae250424e52d // indirect
+	github.com/klauspost/compress v1.11.3 // indirect
+	github.com/klauspost/pgzip v1.2.5
 	github.com/kshedden/gonpy v0.0.0-20190510000443-66c21fac4672
-	github.com/lucasb-eyer/go-colorful v1.0.3
 	github.com/mattn/go-isatty v0.0.12
 	github.com/prometheus/client_golang v1.6.0 // indirect
 	github.com/prometheus/common v0.10.0 // indirect
@@ -23,7 +24,6 @@ require (
 	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2
 	golang.org/x/sys v0.0.0-20200519105757-fe76b779f299 // indirect
 	gonum.org/v1/gonum v0.8.1
-	gonum.org/v1/plot v0.0.0-20190515093506-e2840ee46a6b
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 )

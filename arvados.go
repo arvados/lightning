@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -184,12 +185,14 @@ type arvadosContainerRunner struct {
 	Name        string
 	OutputName  string
 	ProjectUUID string
+	APIAccess   bool
 	VCPUs       int
 	RAM         int64
 	Prog        string // if empty, run /proc/self/exe
 	Args        []string
 	Mounts      map[string]map[string]interface{}
 	Priority    int
+	KeepCache   int // cache buffers per VCPU (0 for default)
 }
 
 func (runner *arvadosContainerRunner) Run() (string, error) {
@@ -229,10 +232,15 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 	if priority < 1 {
 		priority = 500
 	}
+	keepCache := runner.KeepCache
+	if keepCache < 1 {
+		keepCache = 2
+	}
 	rc := arvados.RuntimeConstraints{
+		API:          &runner.APIAccess,
 		VCPUs:        runner.VCPUs,
 		RAM:          runner.RAM,
-		KeepCacheRAM: (1 << 26) * 2 * int64(runner.VCPUs),
+		KeepCacheRAM: (1 << 26) * int64(keepCache) * int64(runner.VCPUs),
 	}
 	outname := &runner.OutputName
 	if *outname == "" {
@@ -448,4 +456,44 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 	}
 	log.Printf("stored lightning binary in new collection %s", coll.UUID)
 	return coll.UUID, nil
+}
+
+var arvadosClientFromEnv = arvados.NewClientFromEnv()
+
+func open(fnm string) (io.ReadCloser, error) {
+	if os.Getenv("ARVADOS_API_HOST") == "" {
+		return os.Open(fnm)
+	}
+	m := collectionInPathRe.FindStringSubmatch(fnm)
+	if m == nil {
+		return os.Open(fnm)
+	}
+	uuid := m[2]
+	mnt := "/mnt/" + uuid + "/"
+	if !strings.HasPrefix(fnm, mnt) {
+		return os.Open(fnm)
+	}
+
+	log.Infof("reading %q from %s using Arvados client library", fnm[len(mnt):], uuid)
+	ac, err := arvadosclient.New(arvadosClientFromEnv)
+	if err != nil {
+		return nil, err
+	}
+	ac.Client = arvados.DefaultSecureClient
+	kc := keepclient.New(ac)
+	// Don't use keepclient's default short timeouts.
+	kc.HTTPClient = arvados.DefaultSecureClient
+	// Don't cache more than one block for this file.
+	kc.BlockCache = &keepclient.BlockCache{MaxBlocks: 1}
+
+	var coll arvados.Collection
+	err = arvadosClientFromEnv.RequestAndDecode(&coll, "GET", "arvados/v1/collections/"+uuid, nil, arvados.GetOptions{Select: []string{"uuid", "manifest_text"}})
+	if err != nil {
+		return nil, err
+	}
+	fs, err := coll.FileSystem(arvadosClientFromEnv, kc)
+	if err != nil {
+		return nil, err
+	}
+	return fs.Open(fnm[len(mnt):])
 }

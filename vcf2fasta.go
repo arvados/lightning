@@ -22,7 +22,7 @@ import (
 	"sync"
 	"syscall"
 
-	"git.arvados.org/arvados.git/sdk/go/arvados"
+	"github.com/klauspost/pgzip"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -107,14 +107,15 @@ func (cmd *vcf2fasta) RunCommand(prog string, args []string, stdin io.Reader, st
 				cmd.vcpus = 32
 			}
 		}
-		client := arvados.NewClientFromEnv()
 		runner := arvadosContainerRunner{
 			Name:        "lightning vcf2fasta",
-			Client:      client,
+			Client:      arvadosClientFromEnv,
 			ProjectUUID: cmd.projectUUID,
 			RAM:         2<<30 + int64(cmd.vcpus)<<28,
 			VCPUs:       cmd.vcpus,
 			Priority:    *priority,
+			KeepCache:   2,
+			APIAccess:   true,
 			Mounts: map[string]map[string]interface{}{
 				"/gvcf_regions.py": map[string]interface{}{
 					"kind":    "text",
@@ -238,7 +239,7 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 	}
 	defer outf.Close()
 	bufw := bufio.NewWriterSize(outf, 8*1024*1024)
-	gzipw := gzip.NewWriter(bufw)
+	gzipw := pgzip.NewWriter(bufw)
 	defer gzipw.Close()
 
 	var maskfifo string // filename of mask fifo if we're running bedtools, otherwise ""
@@ -248,12 +249,13 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 	if cmd.mask {
 		chrSize := map[string]int{}
 
-		vcffile, err := os.Open(infile)
+		vcffile, err := open(infile)
 		if err != nil {
 			return err
 		}
 		defer vcffile.Close()
 		var rdr io.Reader = vcffile
+		rdr = bufio.NewReaderSize(rdr, 8*1024*1024)
 		if strings.HasSuffix(infile, ".gz") {
 			rdr, err = gzip.NewReader(vcffile)
 			if err != nil {
@@ -297,7 +299,7 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 			// Read chromosome sizes from genome file in
 			// case any weren't specified in the VCF
 			// header.
-			genomeFile, err := os.Open(cmd.genomeFile)
+			genomeFile, err := open(cmd.genomeFile)
 			if err != nil {
 				return fmt.Errorf("error opening genome file %q: %s", cmd.genomeFile, err)
 			}
