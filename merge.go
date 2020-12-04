@@ -70,9 +70,10 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 			Name:        "lightning merge",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         64000000000,
+			RAM:         150000000000,
 			VCPUs:       2,
 			Priority:    *priority,
+			APIAccess:   true,
 		}
 		for i := range cmd.inputs {
 			err = runner.TranslatePaths(&cmd.inputs[i])
@@ -152,22 +153,21 @@ func (cmd *merger) doMerge() error {
 
 	var wg sync.WaitGroup
 	for _, input := range cmd.inputs {
-		var infile io.ReadCloser
-		if input == "-" {
-			infile = ioutil.NopCloser(cmd.stdin)
-		} else {
+		rdr := ioutil.NopCloser(cmd.stdin)
+		if input != "-" {
 			var err error
-			infile, err = os.Open(input)
+			rdr, err = open(input)
 			if err != nil {
 				return err
 			}
-			defer infile.Close()
+			defer rdr.Close()
 		}
+		rdr = ioutil.NopCloser(bufio.NewReaderSize(rdr, 8*1024*1024))
 		wg.Add(1)
 		go func(input string) {
 			defer wg.Done()
 			log.Printf("%s: reading", input)
-			err := cmd.tilelib.LoadGob(ctx, infile, strings.HasSuffix(input, ".gz"), nil)
+			err := cmd.tilelib.LoadGob(ctx, rdr, strings.HasSuffix(input, ".gz"), nil)
 			if err != nil {
 				cmd.setError(fmt.Errorf("%s: load failed: %w", input, err))
 				cancel()

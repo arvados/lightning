@@ -66,9 +66,11 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			Name:        "lightning export-numpy",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         128000000000,
-			VCPUs:       32,
+			RAM:         240000000000,
+			VCPUs:       16,
 			Priority:    *priority,
+			KeepCache:   1,
+			APIAccess:   true,
 		}
 		err = runner.TranslatePaths(inputFilename)
 		if err != nil {
@@ -98,12 +100,13 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	if *inputFilename == "-" {
 		input = ioutil.NopCloser(stdin)
 	} else {
-		input, err = os.Open(*inputFilename)
+		input, err = open(*inputFilename)
 		if err != nil {
 			return 1
 		}
 		defer input.Close()
 	}
+	input = ioutil.NopCloser(bufio.NewReaderSize(input, 8*1024*1024))
 	tilelib := &tileLibrary{
 		retainNoCalls:       true,
 		retainTileSequences: true,
