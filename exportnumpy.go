@@ -11,6 +11,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path"
 	"sort"
 	"strings"
 
@@ -155,8 +156,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			return 1
 		}
 		defer f.Close()
+		_, outBasename := path.Split(*outputFilename)
 		for i, name := range names {
-			_, err = fmt.Fprintf(f, "%d,%q\n", i, trimFilenameForLabel(name))
+			_, err = fmt.Fprintf(f, "%d,%q,%q\n", i, trimFilenameForLabel(name), outBasename)
 			if err != nil {
 				err = fmt.Errorf("write %s: %w", *labelsFilename, err)
 				return 1
