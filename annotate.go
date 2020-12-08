@@ -106,7 +106,7 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 		}
 		defer output.Close()
 	}
-	bufw := bufio.NewWriter(output)
+	bufw := bufio.NewWriterSize(output, 4*1024*1024)
 
 	tilelib := &tileLibrary{
 		retainNoCalls:       true,
