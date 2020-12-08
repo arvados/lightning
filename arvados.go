@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"git.arvados.org/arvados.git/lib/cmd"
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"git.arvados.org/arvados.git/sdk/go/arvadosclient"
 	"git.arvados.org/arvados.git/sdk/go/keepclient"
@@ -399,7 +400,7 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 		return "", err
 	}
 	b2 := blake2b.Sum256(exe)
-	cname := fmt.Sprintf("lightning-%x", b2)
+	cname := "lightning " + cmd.Version.String() // must build with "make", not just "go install"
 	var existing arvados.CollectionList
 	err = runner.Client.RequestAndDecode(&existing, "GET", "arvados/v1/collections", nil, arvados.ListOptions{
 		Limit: 1,
@@ -407,15 +408,16 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 		Filters: []arvados.Filter{
 			{Attr: "name", Operator: "=", Operand: cname},
 			{Attr: "owner_uuid", Operator: "=", Operand: runner.ProjectUUID},
+			{Attr: "properties.blake2b", Operator: "=", Operand: fmt.Sprintf("%x", b2)},
 		},
 	})
 	if err != nil {
 		return "", err
 	}
 	if len(existing.Items) > 0 {
-		uuid := existing.Items[0].UUID
-		log.Printf("using lightning binary in existing collection %s (name is %q; did not verify whether content matches)", uuid, cname)
-		return uuid, nil
+		coll := existing.Items[0]
+		log.Printf("using lightning binary in existing collection %s (name is %q, hash is %q; did not verify whether content matches)", coll.UUID, cname, coll.Properties["blake2b"])
+		return coll.UUID, nil
 	}
 	log.Printf("writing lightning binary to new collection %q", cname)
 	ac, err := arvadosclient.New(runner.Client)
@@ -449,6 +451,9 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 			"owner_uuid":    runner.ProjectUUID,
 			"manifest_text": mtxt,
 			"name":          cname,
+			"properties": map[string]interface{}{
+				"blake2b": fmt.Sprintf("%x", b2),
+			},
 		},
 	})
 	if err != nil {
