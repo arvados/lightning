@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"compress/gzip"
 	"context"
 	"encoding/gob"
 	"errors"
@@ -17,13 +16,14 @@ import (
 	"sync"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
+	"github.com/klauspost/pgzip"
 	log "github.com/sirupsen/logrus"
 )
 
 type merger struct {
 	stdin   io.Reader
 	inputs  []string
-	output  io.WriteCloser
+	output  io.Writer
 	tagSet  [][]byte
 	tilelib *tileLibrary
 	mapped  map[string]map[tileLibRef]tileVariantID
@@ -71,7 +71,7 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         150000000000,
-			VCPUs:       2,
+			VCPUs:       16,
 			Priority:    *priority,
 			APIAccess:   true,
 		}
@@ -103,13 +103,18 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 		}
 		defer outf.Close()
 		if strings.HasSuffix(*outputFilename, ".gz") {
-			outw = gzip.NewWriter(outf)
+			outw = pgzip.NewWriter(outf)
 		} else {
-			outw = outf
+			outw = nopCloser{outf}
 		}
 	}
-	cmd.output = outw
+	bufw := bufio.NewWriterSize(outw, 64*1024*1024)
+	cmd.output = bufw
 	err = cmd.doMerge()
+	if err != nil {
+		return 1
+	}
+	err = bufw.Flush()
 	if err != nil {
 		return 1
 	}
@@ -117,7 +122,7 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 	if err != nil {
 		return 1
 	}
-	if outf != nil && outf != outw {
+	if outf != nil {
 		err = outf.Close()
 		if err != nil {
 			return 1
