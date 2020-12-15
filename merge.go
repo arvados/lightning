@@ -70,10 +70,11 @@ func (cmd *merger) RunCommand(prog string, args []string, stdin io.Reader, stdou
 			Name:        "lightning merge",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         150000000000,
+			RAM:         250000000000,
 			VCPUs:       16,
 			Priority:    *priority,
 			APIAccess:   true,
+			KeepCache:   1,
 		}
 		for i := range cmd.inputs {
 			err = runner.TranslatePaths(&cmd.inputs[i])
