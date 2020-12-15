@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
-	"compress/gzip"
 	"encoding/gob"
 	"io"
 	"io/ioutil"
 	_ "net/http/pprof"
 
+	"github.com/klauspost/pgzip"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -48,7 +48,7 @@ func DecodeLibrary(rdr io.Reader, gz bool, cb func(*LibraryEntry) error) error {
 	zrdr := ioutil.NopCloser(rdr)
 	var err error
 	if gz {
-		zrdr, err = gzip.NewReader(bufio.NewReaderSize(rdr, 1<<26))
+		zrdr, err = pgzip.NewReader(bufio.NewReaderSize(rdr, 1<<26))
 		if err != nil {
 			return err
 		}
