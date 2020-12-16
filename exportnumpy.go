@@ -232,7 +232,9 @@ func cgs2array(tilelib *tileLibrary) (data []int16, rows, cols int, cgnames []st
 	for name := range tilelib.compactGenomes {
 		cgnames = append(cgnames, name)
 	}
-	sort.Strings(cgnames)
+	sort.Slice(cgnames, func(i, j int) bool {
+		return trimFilenameForLabel(cgnames[i]) < trimFilenameForLabel(cgnames[j])
+	})
 
 	rows = len(tilelib.compactGenomes)
 	for _, cg := range tilelib.compactGenomes {
