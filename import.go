@@ -180,7 +180,7 @@ func (cmd *importer) runBatches(stdout io.Writer, inputs []string) error {
 		Client:      arvadosClientFromEnv,
 		ProjectUUID: cmd.projectUUID,
 		APIAccess:   true,
-		RAM:         300000000000,
+		RAM:         420000000000,
 		VCPUs:       64,
 		Priority:    cmd.priority,
 		KeepCache:   1,
