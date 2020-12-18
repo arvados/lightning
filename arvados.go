@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -463,7 +464,11 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 	return coll.UUID, nil
 }
 
-var arvadosClientFromEnv = arvados.NewClientFromEnv()
+var (
+	arvadosClientFromEnv = arvados.NewClientFromEnv()
+	siteFS               arvados.CustomFileSystem
+	siteFSMtx            sync.Mutex
+)
 
 func open(fnm string) (io.ReadCloser, error) {
 	if os.Getenv("ARVADOS_API_HOST") == "" {
@@ -479,26 +484,24 @@ func open(fnm string) (io.ReadCloser, error) {
 		return os.Open(fnm)
 	}
 
-	log.Infof("reading %q from %s using Arvados client library", fnm[len(mnt):], uuid)
-	ac, err := arvadosclient.New(arvadosClientFromEnv)
-	if err != nil {
-		return nil, err
+	siteFSMtx.Lock()
+	defer siteFSMtx.Unlock()
+	if siteFS == nil {
+		log.Infof("setting up Arvados client", fnm[len(mnt):], uuid)
+		ac, err := arvadosclient.New(arvadosClientFromEnv)
+		if err != nil {
+			return nil, err
+		}
+		ac.Client = arvados.DefaultSecureClient
+		kc := keepclient.New(ac)
+		// Don't use keepclient's default short timeouts.
+		kc.HTTPClient = arvados.DefaultSecureClient
+		// Guess max concurrent readers, hope to avoid cache
+		// thrashing.
+		kc.BlockCache = &keepclient.BlockCache{MaxBlocks: runtime.NumCPU() * 3}
+		siteFS = arvadosClientFromEnv.SiteFileSystem(kc)
 	}
-	ac.Client = arvados.DefaultSecureClient
-	kc := keepclient.New(ac)
-	// Don't use keepclient's default short timeouts.
-	kc.HTTPClient = arvados.DefaultSecureClient
-	// Don't cache more than one block for this file.
-	kc.BlockCache = &keepclient.BlockCache{MaxBlocks: 1}
 
-	var coll arvados.Collection
-	err = arvadosClientFromEnv.RequestAndDecode(&coll, "GET", "arvados/v1/collections/"+uuid, nil, arvados.GetOptions{Select: []string{"uuid", "manifest_text"}})
-	if err != nil {
-		return nil, err
-	}
-	fs, err := coll.FileSystem(arvadosClientFromEnv, kc)
-	if err != nil {
-		return nil, err
-	}
-	return fs.Open(fnm[len(mnt):])
+	log.Infof("reading %q from %s using Arvados client", fnm[len(mnt):], uuid)
+	return siteFS.Open("by_id/" + uuid + "/" + fnm[len(mnt):])
 }
