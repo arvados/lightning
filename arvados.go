@@ -487,7 +487,7 @@ func open(fnm string) (io.ReadCloser, error) {
 	siteFSMtx.Lock()
 	defer siteFSMtx.Unlock()
 	if siteFS == nil {
-		log.Infof("setting up Arvados client", fnm[len(mnt):], uuid)
+		log.Info("setting up Arvados client")
 		ac, err := arvadosclient.New(arvadosClientFromEnv)
 		if err != nil {
 			return nil, err
