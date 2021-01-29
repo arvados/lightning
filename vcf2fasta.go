@@ -285,7 +285,12 @@ func (cmd *vcf2fasta) vcf2fasta(infile string, phase int) error {
 
 		var regions bytes.Buffer
 		bedargs := []string{"python2", "-"}
-		if cmd.gvcfType != "" {
+		if cmd.gvcfType == "complete_genomics_pass_all" {
+			bedargs = append(bedargs,
+				"--ignore_phrases", "CNV", "INS:ME",
+				"--unreported_is_called",
+			)
+		} else if cmd.gvcfType != "" {
 			bedargs = append(bedargs, "--gvcf_type", cmd.gvcfType)
 		}
 		bedargs = append(bedargs, infile)
