@@ -324,6 +324,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		log.Infof("%s %s getting %d librefs", filelabel, job.label, len(found))
 		throttle := &throttle{Max: runtime.NumCPU()}
 		path = path[:len(found)]
+		var lowquality int64
 		for i, f := range found {
 			i, f := i, f
 			throttle.Acquire()
@@ -341,6 +342,9 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 					endpos = found[i+1].pos + taglen
 				}
 				path[i] = tilelib.getRef(f.tagid, job.fasta[startpos:endpos])
+				if countBases(job.fasta[startpos:endpos]) != endpos-startpos {
+					atomic.AddInt64(&lowquality, 1)
+				}
 			}()
 		}
 		throttle.Wait()
@@ -352,7 +356,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		ret[job.label] = pathcopy
 
 		basesIn := countBases(job.fasta)
-		log.Infof("%s %s fasta in %d coverage in %d path len %d skipped-out-of-order %d", filelabel, job.label, len(job.fasta), basesIn, len(path), skipped)
+		log.Infof("%s %s fasta in %d coverage in %d path len %d low-quality %d skipped-out-of-order %d", filelabel, job.label, len(job.fasta), basesIn, len(path), lowquality, skipped)
 		stats = append(stats, importStats{
 			InputFile:              filelabel,
 			InputLabel:             job.label,
