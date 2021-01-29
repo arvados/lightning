@@ -17,6 +17,7 @@ import (
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/kshedden/gonpy"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -199,7 +200,10 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			}
 		}
 	}
-	log.Info("writing numpy")
+	log.WithFields(logrus.Fields{
+		"rows": rows,
+		"cols": cols,
+	}).Info("writing numpy")
 	npw.Shape = []int{rows, cols}
 	npw.WriteInt16(out)
 	err = bufw.Flush()
