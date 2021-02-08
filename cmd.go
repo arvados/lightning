@@ -1,4 +1,4 @@
-package main
+package lightning
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ var (
 	})
 )
 
-func main() {
+func Main() {
 	if !isatty.IsTerminal(os.Stderr.Fd()) {
 		logrus.StandardLogger().Formatter = &logrus.TextFormatter{DisableTimestamp: true}
 	}

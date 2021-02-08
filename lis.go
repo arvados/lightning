@@ -1,4 +1,4 @@
-package main
+package lightning
 
 func longestIncreasingSubsequence(srclen int, X func(int) int) []int {
 	if srclen == 0 {

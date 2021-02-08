@@ -1,4 +1,4 @@
-package main
+package lightning
 
 import (
 	"gopkg.in/check.v1"
