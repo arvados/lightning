@@ -53,7 +53,7 @@ func (cmd *buildDockerImage) RunCommand(prog string, args []string, stdin io.Rea
 		return 1
 	}
 	defer os.RemoveAll(tmpdir)
-	err = ioutil.WriteFile(tmpdir+"/Dockerfile", []byte(`FROM debian:10
+	err = ioutil.WriteFile(tmpdir+"/Dockerfile", []byte(`FROM debian:bullseye
 RUN DEBIAN_FRONTEND=noninteractive \
   apt-get update && \
   apt-get dist-upgrade -y && \
