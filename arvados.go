@@ -262,6 +262,10 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 			"runtime_constraints": rc,
 			"priority":            runner.Priority,
 			"state":               arvados.ContainerRequestStateCommitted,
+			"scheduling_parameters": arvados.SchedulingParameters{
+				Preemptible: true,
+				Partitions:  []string{},
+			},
 		},
 	})
 	if err != nil {
