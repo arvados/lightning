@@ -272,7 +272,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ta
 	}
 
 	log.Infof("assembling %d sequences concurrently", len(seqnames))
-	var wg sync.WaitGroup
+	throttle := throttle{Max: 8}
 	outbuf := make([]bytes.Buffer, len(seqnames))
 	bedbuf := make([]bytes.Buffer, len(seqnames))
 	for seqidx, seqname := range seqnames {
@@ -282,35 +282,34 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ta
 		if bedout == nil {
 			bedbuf = nil
 		}
-		// TODO: limit number of goroutines and unflushed bufs to ncpus
-		wg.Add(1)
+		throttle.Acquire()
 		go func() {
-			defer wg.Done()
+			defer throttle.Release()
 			cmd.exportSeq(outbuf, bedbuf, taglen, seqname, refseq[seqname], tileVariant, cgs)
 			log.Infof("assembled %q to outbuf %d bedbuf %d", seqname, outbuf.Len(), bedbuf.Len())
 		}()
 	}
-	wg.Wait()
+	throttle.Wait()
 
-	wg.Add(1)
+	throttle.Acquire()
 	go func() {
-		defer wg.Done()
+		defer throttle.Release()
 		for i, seqname := range seqnames {
 			log.Infof("writing outbuf %s", seqname)
 			io.Copy(out, &outbuf[i])
 		}
 	}()
 	if bedout != nil {
-		wg.Add(1)
+		throttle.Acquire()
 		go func() {
-			defer wg.Done()
+			defer throttle.Release()
 			for i, seqname := range seqnames {
 				log.Infof("writing bedbuf %s", seqname)
 				io.Copy(bedout, &bedbuf[i])
 			}
 		}()
 	}
-	wg.Wait()
+	throttle.Wait()
 	return nil
 }
 
