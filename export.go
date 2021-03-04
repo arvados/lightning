@@ -88,7 +88,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         240000000000,
+			RAM:         700000000000,
 			VCPUs:       32,
 			Priority:    *priority,
 		}
