@@ -162,7 +162,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	tilelib.Tidy()
 
 	log.Print("converting cgs to array")
-	data, rows, cols, _ := cgs2array(tilelib)
+	data, rows, cols := cgs2array(tilelib, cgnames(tilelib), lowqual(tilelib), 0, len(tilelib.variant))
 	if *onehot {
 		log.Printf("recode one-hot: %d rows, %d cols", rows, cols)
 		data, _, cols = recodeOnehot(data, cols)
