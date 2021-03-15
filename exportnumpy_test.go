@@ -2,6 +2,7 @@ package lightning
 
 import (
 	"bytes"
+	"io/ioutil"
 	"os"
 
 	"github.com/kshedden/gonpy"
@@ -13,11 +14,13 @@ type exportSuite struct{}
 var _ = check.Suite(&exportSuite{})
 
 func (s *exportSuite) TestFastaToNumpy(c *check.C) {
+	tmpdir := c.MkDir()
+
 	var buffer bytes.Buffer
-	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-ref", "testdata/ref", "-output-tiles", "testdata/a.1.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
+	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/a.1.fasta", "testdata/tinyref.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
 	var output bytes.Buffer
-	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true"}, &buffer, &output, os.Stderr)
+	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-annotations", tmpdir + "/annotations.csv"}, &buffer, &output, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	npy, err := gonpy.NewReader(&output)
 	c.Assert(err, check.IsNil)
@@ -33,6 +36,10 @@ func (s *exportSuite) TestFastaToNumpy(c *check.C) {
 	for i := 4; i < 9; i += 2 {
 		c.Check(variants[i], check.Equals, int16(1), check.Commentf("i=%d, v=%v", i, variants))
 	}
+	annotations, err := ioutil.ReadFile(tmpdir + "/annotations.csv")
+	c.Check(err, check.IsNil)
+	c.Check(string(annotations), check.Matches, `(?ms).*1,2,chr1:g.84_85insACTGCGATCTGA\n.*`)
+	c.Check(string(annotations), check.Matches, `(?ms).*1,1,chr1:g.87_96delinsGCATCTGCA\n.*`)
 }
 
 func sortUints(variants []int16) {

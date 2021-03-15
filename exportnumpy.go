@@ -148,9 +148,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		}
 	}
 
-	log.Info("building numpy array")
-	names := cgnames(tilelib)
+	log.Info("building lowqual map")
 	lowqual := lowqual(tilelib)
+	names := cgnames(tilelib)
 
 	if *labelsFilename != "" {
 		log.Infof("writing labels to %s", *labelsFilename)
@@ -177,6 +177,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 
 	chunksize := (len(tilelib.variant) + *chunks - 1) / *chunks
 	for chunk := 0; chunk < *chunks; chunk++ {
+		log.Infof("preparing chunk %d of %d", chunk+1, *chunks+1)
 		tagstart := chunk * chunksize
 		tagend := tagstart + chunksize
 		if tagend > len(tilelib.variant) {
