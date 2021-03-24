@@ -16,30 +16,35 @@ var _ = check.Suite(&exportSuite{})
 func (s *exportSuite) TestFastaToNumpy(c *check.C) {
 	tmpdir := c.MkDir()
 
+	err := ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
+	c.Check(err, check.IsNil)
+
 	var buffer bytes.Buffer
 	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/a.1.fasta", "testdata/tinyref.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
 	var output bytes.Buffer
-	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-annotations", tmpdir + "/annotations.csv"}, &buffer, &output, os.Stderr)
+	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-annotations", tmpdir + "/annotations.csv", "-regions", tmpdir + "/chr1-12-100.bed"}, &buffer, &output, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	npy, err := gonpy.NewReader(&output)
 	c.Assert(err, check.IsNil)
 	variants, err := npy.GetInt16()
 	c.Assert(err, check.IsNil)
-	for i := 0; i < 4; i += 2 {
+	c.Check(variants, check.HasLen, 6)
+	for i := 0; i < 4 && i < len(variants); i += 2 {
 		if variants[i] == 1 {
 			c.Check(variants[i+1], check.Equals, int16(2), check.Commentf("i=%d, v=%v", i, variants))
 		} else {
 			c.Check(variants[i], check.Equals, int16(2), check.Commentf("i=%d, v=%v", i, variants))
 		}
 	}
-	for i := 4; i < 9; i += 2 {
+	for i := 4; i < 6 && i < len(variants); i += 2 {
 		c.Check(variants[i], check.Equals, int16(1), check.Commentf("i=%d, v=%v", i, variants))
 	}
 	annotations, err := ioutil.ReadFile(tmpdir + "/annotations.csv")
 	c.Check(err, check.IsNil)
-	c.Check(string(annotations), check.Matches, `(?ms).*1,2,chr1:g.84_85insACTGCGATCTGA\n.*`)
-	c.Check(string(annotations), check.Matches, `(?ms).*1,1,chr1:g.87_96delinsGCATCTGCA\n.*`)
+	c.Logf("%s", string(annotations))
+	c.Check(string(annotations), check.Matches, `(?ms)(.*\n)?1,1,2,chr1:g.84_85insACTGCGATCTGA\n.*`)
+	c.Check(string(annotations), check.Matches, `(?ms)(.*\n)?1,1,1,chr1:g.87_96delinsGCATCTGCA\n.*`)
 }
 
 func sortUints(variants []int16) {

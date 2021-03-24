@@ -2,6 +2,7 @@ package lightning
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -43,6 +45,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	annotationsFilename := flags.String("output-annotations", "", "output `file` for tile variant annotations csv")
 	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create csv `file` mapping column# to tag# and variant#")
 	labelsFilename := flags.String("output-labels", "", "output `file` for genome labels csv")
+	regionsFilename := flags.String("regions", "", "only output columns/annotations that intersect regions in specified bed `file`")
 	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
 	chunks := flags.Int("chunks", 1, "split output into `N` numpy files")
 	cmd.filter.Flags(flags)
@@ -75,7 +78,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			KeepCache:   1,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputFilename)
+		err = runner.TranslatePaths(inputFilename, regionsFilename)
 		if err != nil {
 			return 1
 		}
@@ -86,6 +89,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			"-output-annotations", "/mnt/output/annotations.csv",
 			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.csv",
 			"-output-labels", "/mnt/output/labels.csv",
+			"-regions", *regionsFilename,
 			"-max-variants", fmt.Sprintf("%d", cmd.filter.MaxVariants),
 			"-min-coverage", fmt.Sprintf("%f", cmd.filter.MinCoverage),
 			"-max-tag", fmt.Sprintf("%d", cmd.filter.MaxTag),
@@ -130,24 +134,6 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	log.Info("tidying")
 	tilelib.Tidy()
 
-	if *annotationsFilename != "" {
-		log.Infof("writing annotations")
-		var annow io.WriteCloser
-		annow, err = os.OpenFile(*annotationsFilename, os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			return 1
-		}
-		defer annow.Close()
-		err = (&annotatecmd{maxTileSize: 5000}).exportTileDiffs(annow, tilelib)
-		if err != nil {
-			return 1
-		}
-		err = annow.Close()
-		if err != nil {
-			return 1
-		}
-	}
-
 	log.Info("building lowqual map")
 	lowqual := lowqual(tilelib)
 	names := cgnames(tilelib)
@@ -175,15 +161,39 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		}
 	}
 
+	log.Info("determining which tiles intersect given regions")
+	dropTiles, err := chooseTiles(tilelib, *regionsFilename)
+	if err != nil {
+		return 1
+	}
+
+	if *annotationsFilename != "" {
+		log.Info("writing annotations")
+		var annow io.WriteCloser
+		annow, err = os.OpenFile(*annotationsFilename, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return 1
+		}
+		defer annow.Close()
+		err = (&annotatecmd{maxTileSize: 5000, dropTiles: dropTiles}).exportTileDiffs(annow, tilelib)
+		if err != nil {
+			return 1
+		}
+		err = annow.Close()
+		if err != nil {
+			return 1
+		}
+	}
+
 	chunksize := (len(tilelib.variant) + *chunks - 1) / *chunks
 	for chunk := 0; chunk < *chunks; chunk++ {
-		log.Infof("preparing chunk %d of %d", chunk+1, *chunks+1)
+		log.Infof("preparing chunk %d of %d", chunk+1, *chunks)
 		tagstart := chunk * chunksize
 		tagend := tagstart + chunksize
 		if tagend > len(tilelib.variant) {
 			tagend = len(tilelib.variant)
 		}
-		out, rows, cols := cgs2array(tilelib, names, lowqual, tagstart, tagend)
+		out, rows, cols := cgs2array(tilelib, names, lowqual, dropTiles, tagstart, tagend)
 
 		var npw *gonpy.NpyWriter
 		var output io.WriteCloser
@@ -282,27 +292,134 @@ func lowqual(tilelib *tileLibrary) (lowqual []map[tileVariantID]bool) {
 	return
 }
 
-func cgs2array(tilelib *tileLibrary, names []string, lowqual []map[tileVariantID]bool, tagstart, tagend int) (data []int16, rows, cols int) {
+func cgs2array(tilelib *tileLibrary, names []string, lowqual []map[tileVariantID]bool, dropTiles []bool, tagstart, tagend int) (data []int16, rows, cols int) {
 	rows = len(tilelib.compactGenomes)
-	cols = (tagend - tagstart) * 2
+	for tag := tagstart; tag < tagend; tag++ {
+		if len(dropTiles) <= tag || !dropTiles[tag] {
+			cols += 2
+		}
+	}
 	data = make([]int16, rows*cols)
 	for row, name := range names {
 		cg := tilelib.compactGenomes[name]
-		if tagstart*2 >= len(cg) {
-			continue
-		}
-		cg = cg[tagstart*2:]
-		if cols < len(cg) {
-			cg = cg[:cols]
-		}
-		for i, v := range cg {
-			if v > 0 && lowqual[tagstart+i/2][v] {
-				data[row*cols+i] = -1
-			} else {
-				data[row*cols+i] = int16(v)
+		outidx := 0
+		for tag := tagstart; tag < tagend && tag*2+1 < len(cg); tag++ {
+			if len(dropTiles) > tag && dropTiles[tag] {
+				continue
+			}
+			for phase := 0; phase < 2; phase++ {
+				v := cg[tag*2+phase]
+				if v > 0 && lowqual[tag][v] {
+					data[row*cols+outidx] = -1
+				} else {
+					data[row*cols+outidx] = int16(v)
+				}
+				outidx++
 			}
 		}
 	}
+	return
+}
+
+func chooseTiles(tilelib *tileLibrary, regionsFilename string) (drop []bool, err error) {
+	if regionsFilename == "" {
+		return
+	}
+	rfile, err := zopen(regionsFilename)
+	if err != nil {
+		return
+	}
+	defer rfile.Close()
+	regions, err := ioutil.ReadAll(rfile)
+	if err != nil {
+		return
+	}
+
+	log.Print("chooseTiles: building mask")
+	mask := &mask{}
+	for _, line := range bytes.Split(regions, []byte{'\n'}) {
+		if bytes.HasPrefix(line, []byte{'#'}) {
+			continue
+		}
+		fields := bytes.Split(line, []byte{'\t'})
+		if len(fields) < 3 {
+			continue
+		}
+		refseqname := string(fields[0])
+		if strings.HasPrefix(refseqname, "chr") {
+			refseqname = refseqname[3:]
+		}
+		start, err1 := strconv.Atoi(string(fields[1]))
+		end, err2 := strconv.Atoi(string(fields[2]))
+		if err1 == nil && err2 == nil {
+			// BED
+		} else {
+			start, err1 = strconv.Atoi(string(fields[3]))
+			end, err2 = strconv.Atoi(string(fields[4]))
+			if err1 == nil && err2 == nil {
+				// GFF/GTF
+				end++
+			} else {
+				err = fmt.Errorf("cannot parse input line as BED or GFF/GTF: %q", line)
+				return
+			}
+		}
+		mask.Add(refseqname, start, end)
+	}
+	log.Print("chooseTiles: mask.Freeze")
+	mask.Freeze()
+
+	tagset := tilelib.taglib.Tags()
+	if len(tagset) == 0 {
+		err = errors.New("cannot choose tiles by region in a library without tags")
+		return
+	}
+	taglen := len(tagset[0])
+
+	log.Print("chooseTiles: check ref tiles")
+	// Find position+size of each reference tile, and if it
+	// intersects any of the desired regions, set drop[tag]=false.
+	//
+	// (Note it doesn't quite work to do the more obvious thing --
+	// start with drop=false and change to true when ref tiles
+	// intersect target regions -- because that would give us
+	// drop=false for tiles that don't appear at all in the
+	// reference.)
+	//
+	// TODO: (optionally?) don't drop tags for which some tile
+	// variants are spanning tiles, i.e., where the reference tile
+	// does not intersect the desired regions, but a spanning tile
+	// from a genome does.
+	drop = make([]bool, len(tilelib.variant))
+	for i := range drop {
+		drop[i] = true
+	}
+	for refname, refseqs := range tilelib.refseqs {
+		for refseqname, reftiles := range refseqs {
+			if strings.HasPrefix(refseqname, "chr") {
+				refseqname = refseqname[3:]
+			}
+			tileend := 0
+			for _, libref := range reftiles {
+				if libref.Variant < 1 {
+					err = fmt.Errorf("reference %q seq %q uses variant zero at tag %d", refname, refseqname, libref.Tag)
+					return
+				}
+				seq := tilelib.TileVariantSequence(libref)
+				if len(seq) < taglen {
+					err = fmt.Errorf("reference %q seq %q uses tile %d variant %d with sequence len %d < taglen %d", refname, refseqname, libref.Tag, libref.Variant, len(seq), taglen)
+					return
+				}
+				tilestart := tileend
+				tileend = tilestart + len(seq) - taglen
+				if mask.Check(refseqname, tilestart, tileend) {
+					drop[libref.Tag] = false
+				}
+			}
+		}
+	}
+
+	log.Print("chooseTiles: done")
 	return
 }
 

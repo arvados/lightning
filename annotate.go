@@ -23,6 +23,7 @@ import (
 )
 
 type annotatecmd struct {
+	dropTiles   []bool
 	variantHash bool
 	maxTileSize int
 	tag2tagid   map[string]tagID
@@ -194,6 +195,10 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 }
 
 func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string, tilelib *tileLibrary, taglen int, refname, seqname string, reftiles []tileLibRef, refnamecol bool) error {
+	refnamefield := ""
+	if refnamecol {
+		refnamefield = "," + trimFilenameForLabel(refname)
+	}
 	var refseq []byte
 	// tilestart[123] is the index into refseq
 	// where the tile for tag 123 was placed.
@@ -216,8 +221,22 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 		tileend[libref.Tag] = len(refseq)
 	}
 	log.Infof("seq %s len(refseq) %d len(tilestart) %d", seqname, len(refseq), len(tilestart))
+	// outtag is tag's index in the subset of tags that aren't
+	// dropped. If there are 10M tags and half are dropped by
+	// dropTiles, tag ranges from 0 to 10M-1 and outtag ranges
+	// from 0 to 5M-1.
+	//
+	// IOW, in the matrix built by cgs2array(), {tag} is
+	// represented by columns {outtag}*2 and {outtag}*2+1.
+	outcol := -1
 	for tag, tvs := range tilelib.variant {
+		if len(cmd.dropTiles) > tag && cmd.dropTiles[tag] {
+			continue
+		}
 		tag := tagID(tag)
+		outcol++
+		// Must shadow outcol var to use safely in goroutine below.
+		outcol := outcol
 		refstart, ok := tilestart[tag]
 		if !ok {
 			// Tag didn't place on this
@@ -227,6 +246,7 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 			// anyway, but we don't output
 			// the annotations that would
 			// result.)
+			// outch <- fmt.Sprintf("%d,%d,-1%s\n", tag, outcol, refnamefield)
 			continue
 		}
 		for variant := 1; variant <= len(tvs); variant++ {
@@ -275,11 +295,7 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 					} else {
 						varid = fmt.Sprintf("%d", variant)
 					}
-					refnamefield := ""
-					if refnamecol {
-						refnamefield = "," + trimFilenameForLabel(refname)
-					}
-					outch <- fmt.Sprintf("%d,%s%s,%s:g.%s\n", tag, varid, refnamefield, seqname, diff.String())
+					outch <- fmt.Sprintf("%d,%d,%s%s,%s:g.%s\n", tag, outcol, varid, refnamefield, seqname, diff.String())
 				}
 			}()
 		}

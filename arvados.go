@@ -1,6 +1,7 @@
 package lightning
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"git.arvados.org/arvados.git/sdk/go/arvadosclient"
 	"git.arvados.org/arvados.git/sdk/go/keepclient"
+	"github.com/klauspost/pgzip"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/net/websocket"
@@ -466,6 +468,38 @@ func (runner *arvadosContainerRunner) makeCommandCollection() (string, error) {
 	}
 	log.Printf("stored lightning binary in new collection %s", coll.UUID)
 	return coll.UUID, nil
+}
+
+// zopen returns a reader for the given file, using the arvados API
+// instead of arv-mount/fuse where applicable, and transparently
+// decompressing the input if fnm ends with ".gz".
+func zopen(fnm string) (io.ReadCloser, error) {
+	f, err := open(fnm)
+	if err != nil || !strings.HasSuffix(fnm, ".gz") {
+		return f, err
+	}
+	rdr, err := pgzip.NewReader(bufio.NewReaderSize(f, 4*1024*1024))
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return gzipr{rdr, f}, nil
+}
+
+// gzipr wraps a ReadCloser and a Closer, presenting a single Close()
+// method that closes both wrapped objects.
+type gzipr struct {
+	io.ReadCloser
+	io.Closer
+}
+
+func (gr gzipr) Close() error {
+	e1 := gr.ReadCloser.Close()
+	e2 := gr.Closer.Close()
+	if e1 != nil {
+		return e1
+	}
+	return e2
 }
 
 var (

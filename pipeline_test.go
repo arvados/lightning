@@ -143,21 +143,21 @@ chr2 472 572 7 1000 . 496 572
 	c.Check(annotateout.Len() > 0, check.Equals, true)
 	sorted := sortLines(annotateout.String())
 	c.Logf("%s", sorted)
-	c.Check(sorted, check.Equals, sortLines(`0,8d4fe9a63921b,chr1:g.161A>T
-0,8d4fe9a63921b,chr1:g.178A>T
-0,8d4fe9a63921b,chr1:g.1_3delinsGGC
-0,8d4fe9a63921b,chr1:g.222_224del
-0,ba4263ca4199c,chr1:g.1_3delinsGGC
-0,ba4263ca4199c,chr1:g.222_224del
-0,ba4263ca4199c,chr1:g.41_42delinsAA
-1,139890345dbb8,chr1:g.302_305delinsAAAA
-4,cbfca15d241d3,chr2:g.125_127delinsAAA
-4,cbfca15d241d3,chr2:g.1_3delinsAAA
-4,f5fafe9450b02,chr2:g.241_245delinsAAAAA
-4,f5fafe9450b02,chr2:g.291C>A
-4,fe9a71a42adb4,chr2:g.125_127delinsAAA
-6,e36dce85efbef,chr2:g.471_472delinsAA
-6,f81388b184f4a,chr2:g.470_472del
+	c.Check(sorted, check.Equals, sortLines(`0,0,8d4fe9a63921b,chr1:g.161A>T
+0,0,8d4fe9a63921b,chr1:g.178A>T
+0,0,8d4fe9a63921b,chr1:g.1_3delinsGGC
+0,0,8d4fe9a63921b,chr1:g.222_224del
+0,0,ba4263ca4199c,chr1:g.1_3delinsGGC
+0,0,ba4263ca4199c,chr1:g.222_224del
+0,0,ba4263ca4199c,chr1:g.41_42delinsAA
+1,1,139890345dbb8,chr1:g.302_305delinsAAAA
+4,4,cbfca15d241d3,chr2:g.125_127delinsAAA
+4,4,cbfca15d241d3,chr2:g.1_3delinsAAA
+4,4,f5fafe9450b02,chr2:g.241_245delinsAAAAA
+4,4,f5fafe9450b02,chr2:g.291C>A
+4,4,fe9a71a42adb4,chr2:g.125_127delinsAAA
+6,6,e36dce85efbef,chr2:g.471_472delinsAA
+6,6,f81388b184f4a,chr2:g.470_472del
 `))
 }
 
