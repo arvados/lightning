@@ -46,6 +46,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create csv `file` mapping column# to tag# and variant#")
 	labelsFilename := flags.String("output-labels", "", "output `file` for genome labels csv")
 	regionsFilename := flags.String("regions", "", "only output columns/annotations that intersect regions in specified bed `file`")
+	expandRegions := flags.Int("expand-regions", 0, "expand specified regions by `N` base pairs on each side`")
 	onehot := flags.Bool("one-hot", false, "recode tile variants as one-hot")
 	chunks := flags.Int("chunks", 1, "split output into `N` numpy files")
 	cmd.filter.Flags(flags)
@@ -90,6 +91,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.csv",
 			"-output-labels", "/mnt/output/labels.csv",
 			"-regions", *regionsFilename,
+			"-expand-regions", fmt.Sprintf("%d", *expandRegions),
 			"-max-variants", fmt.Sprintf("%d", cmd.filter.MaxVariants),
 			"-min-coverage", fmt.Sprintf("%f", cmd.filter.MinCoverage),
 			"-max-tag", fmt.Sprintf("%d", cmd.filter.MaxTag),
@@ -162,7 +164,7 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	}
 
 	log.Info("determining which tiles intersect given regions")
-	dropTiles, err := chooseTiles(tilelib, *regionsFilename)
+	dropTiles, err := chooseTiles(tilelib, *regionsFilename, *expandRegions)
 	if err != nil {
 		return 1
 	}
@@ -321,7 +323,7 @@ func cgs2array(tilelib *tileLibrary, names []string, lowqual []map[tileVariantID
 	return
 }
 
-func chooseTiles(tilelib *tileLibrary, regionsFilename string) (drop []bool, err error) {
+func chooseTiles(tilelib *tileLibrary, regionsFilename string, expandRegions int) (drop []bool, err error) {
 	if regionsFilename == "" {
 		return
 	}
@@ -364,7 +366,7 @@ func chooseTiles(tilelib *tileLibrary, regionsFilename string) (drop []bool, err
 				return
 			}
 		}
-		mask.Add(refseqname, start, end)
+		mask.Add(refseqname, start-expandRegions, end+expandRegions)
 	}
 	log.Print("chooseTiles: mask.Freeze")
 	mask.Freeze()
