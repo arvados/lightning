@@ -1,6 +1,7 @@
 package hgvs
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/check.v1"
@@ -21,7 +22,7 @@ func (s *diffSuite) TestDiff(c *check.C) {
 		{
 			a:      "aaaaaaaaaa",
 			b:      "aaaaCaaaaa",
-			expect: []string{"5a>C"},
+			expect: []string{"5A>C"},
 		},
 		{
 			a:      "aaaacGcaaa",
@@ -58,10 +59,50 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			b:      "aaCCttttttC",
 			expect: []string{"3_4delinsCC", "7_8del", "12_13insC"},
 		},
+		{
+			// without cleanup, diffmatchpatch solves this as {"3del", "=A", "4_5insA"}
+			a:      "aggaggggg",
+			b:      "agAaggggg",
+			expect: []string{"3G>A"},
+		},
+		{
+			// without cleanup, diffmatchpatch solves this as {"3_4del", "=A", "5_6insAA"}
+			a:      "agggaggggg",
+			b:      "agAAaggggg",
+			expect: []string{"3_4delinsAA"},
+		},
+		{
+			// without cleanup, diffmatchpatch solves this as {"3_4del", "=A", "5_6insCA"}
+			a:      "agggaggggg",
+			b:      "agACaggggg",
+			expect: []string{"3_4delinsAC"},
+		},
+		{
+			// without cleanup, diffmatchpatch solves this as {"3_7del", "=A", "8_9insAAACA"}
+			a:      "aggggggaggggg",
+			b:      "agAAAACaggggg",
+			expect: []string{"3_7delinsAAAAC"},
+		},
+		{
+			// without cleanup, diffmatchpatch solves this as {"3_7del", "=AAAA", "11_12insCAAAA"}
+			a:      "aggggggaaaaggggg",
+			b:      "agAAAACaaaaggggg",
+			expect: []string{"3_7delinsAAAAC"},
+		},
+		{
+			a:      "agggaggggg",
+			b:      "agCAaggggg",
+			expect: []string{"3_4delinsCA"},
+		},
+		{
+			a:      "agggg",
+			b:      "agAAg",
+			expect: []string{"3_4delinsAA"},
+		},
 	} {
 		c.Log(trial)
 		var vars []string
-		diffs, _ := Diff(trial.a, trial.b, 0)
+		diffs, _ := Diff(strings.ToUpper(trial.a), strings.ToUpper(trial.b), 0)
 		for _, v := range diffs {
 			vars = append(vars, v.String())
 		}

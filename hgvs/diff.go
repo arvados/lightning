@@ -2,6 +2,7 @@ package hgvs
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -92,11 +93,37 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 }
 
 func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
+	out = make([]diffmatchpatch.Diff, 0, len(in))
 	for i := 0; i < len(in); i++ {
 		d := in[i]
+		// Merge consecutive entries of same type (e.g.,
+		// "insert A; insert B")
 		for i < len(in)-1 && in[i].Type == in[i+1].Type {
 			d.Text += in[i+1].Text
 			i++
+		}
+		out = append(out, d)
+	}
+	in, out = out, make([]diffmatchpatch.Diff, 0, len(in))
+	for i := 0; i < len(in); i++ {
+		d := in[i]
+		// diffmatchpatch solves diff("AAX","XTX") with
+		// [delAA,=X,insTX] but we prefer to spell it
+		// [delAA,insXT,=X].
+		//
+		// So, when we see a [del,=,ins] sequence where the
+		// "=" part is a suffix of the "ins" part -- e.g.,
+		// [delAAA,=CGG,insTTTCGG] -- we rearrange it to the
+		// equivalent spelling [delAAA,insCGGTTT,=CGG].
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffInsert &&
+			strings.HasSuffix(in[i+2].Text, in[i+1].Text) {
+			eq, ins := in[i+1], in[i+2]
+			ins.Text = eq.Text + ins.Text[:len(ins.Text)-len(eq.Text)]
+			in[i+1] = ins
+			in[i+2] = eq
 		}
 		out = append(out, d)
 	}
