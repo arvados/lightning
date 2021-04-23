@@ -184,6 +184,9 @@ func (cmd *annotatecmd) exportTileDiffs(outw io.Writer, tilelib *tileLibrary) er
 		for _, seqname := range seqnames {
 			seqname := seqname
 			throttle.Acquire()
+			if throttle.Err() != nil {
+				break
+			}
 			go func() {
 				defer throttle.Release()
 				throttle.Report(cmd.annotateSequence(throttle, outch, tilelib, taglen, refname, seqname, refcs[seqname], len(refs) > 1))
