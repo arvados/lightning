@@ -248,6 +248,36 @@ func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, gz bool,
 	return nil
 }
 
+func (tilelib *tileLibrary) dump(out io.Writer) {
+	printTV := func(tag int, variant tileVariantID) {
+		if variant < 1 {
+			fmt.Fprintf(out, " -")
+		} else if tag >= len(tilelib.variant) {
+			fmt.Fprintf(out, " (!tag=%d)", tag)
+		} else if int(variant) > len(tilelib.variant[tag]) {
+			fmt.Fprintf(out, " (tag=%d,!variant=%d)", tag, variant)
+		} else {
+			fmt.Fprintf(out, " %x", tilelib.variant[tag][variant-1][:8])
+		}
+	}
+	for refname, refseqs := range tilelib.refseqs {
+		for seqname, seq := range refseqs {
+			fmt.Fprintf(out, "ref %s %s", refname, seqname)
+			for _, libref := range seq {
+				printTV(int(libref.Tag), libref.Variant)
+			}
+			fmt.Fprintf(out, "\n")
+		}
+	}
+	for name, cg := range tilelib.compactGenomes {
+		fmt.Fprintf(out, "cg %s", name)
+		for tag, variant := range cg {
+			printTV(tag/2, variant)
+		}
+		fmt.Fprintf(out, "\n")
+	}
+}
+
 type importStats struct {
 	InputFile              string
 	InputLabel             string

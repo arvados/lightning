@@ -129,3 +129,13 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 	}
 	return
 }
+
+func Less(a, b Variant) bool {
+	if a.Position != b.Position {
+		return a.Position < b.Position
+	} else if a.New != b.New {
+		return a.New < b.New
+	} else {
+		return a.Ref < b.Ref
+	}
+}

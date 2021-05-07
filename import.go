@@ -42,6 +42,7 @@ type importer struct {
 	outputStats         string
 	matchChromosome     *regexp.Regexp
 	encoder             *gob.Encoder
+	retainAfterEncoding bool // keep imported genomes/refseqs in memory after writing to disk
 	batchArgs
 }
 
@@ -361,7 +362,6 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				var kept, dropped int
 				variants[1], kept, dropped = tseqs.Variants()
 				log.Printf("%s found %d unique tags plus %d repeats", infile2, kept, dropped)
-
 				return err
 			}
 		} else if fastaFilenameRe.MatchString(infile) {
@@ -380,6 +380,16 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 					totlen += len(tseq)
 				}
 				log.Printf("%s tiled %d seqs, total len %d", infile, len(tseqs), totlen)
+
+				if cmd.retainAfterEncoding {
+					tilelib.mtx.Lock()
+					if tilelib.refseqs == nil {
+						tilelib.refseqs = map[string]map[string][]tileLibRef{}
+					}
+					tilelib.refseqs[infile] = tseqs
+					tilelib.mtx.Unlock()
+				}
+
 				return cmd.encoder.Encode(LibraryEntry{
 					CompactSequences: []CompactSequence{{Name: infile, TileSequences: tseqs}},
 				})
@@ -411,14 +421,23 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 			if len(errs) > 0 {
 				return
 			}
+			variants := flatten(variants)
 			err := cmd.encoder.Encode(LibraryEntry{
-				CompactGenomes: []CompactGenome{{Name: infile, Variants: flatten(variants)}},
+				CompactGenomes: []CompactGenome{{Name: infile, Variants: variants}},
 			})
 			if err != nil {
 				select {
 				case errs <- err:
 				default:
 				}
+			}
+			if cmd.retainAfterEncoding {
+				tilelib.mtx.Lock()
+				if tilelib.compactGenomes == nil {
+					tilelib.compactGenomes = make(map[string][]tileVariantID)
+				}
+				tilelib.compactGenomes[infile] = variants
+				tilelib.mtx.Unlock()
 			}
 		}()
 	}

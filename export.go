@@ -11,9 +11,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -28,11 +28,13 @@ type outputFormat struct {
 
 var (
 	outputFormats = map[string]outputFormat{
-		"hgvs": outputFormatHGVS,
-		"vcf":  outputFormatVCF,
+		"hgvs-onehot": outputFormatHGVSOneHot,
+		"hgvs":        outputFormatHGVS,
+		"vcf":         outputFormatVCF,
 	}
-	outputFormatHGVS = outputFormat{Print: printHGVS}
-	outputFormatVCF  = outputFormat{Print: printVCF, PadLeft: true}
+	outputFormatHGVS       = outputFormat{Print: printHGVS}
+	outputFormatHGVSOneHot = outputFormat{Print: printHGVSOneHot}
+	outputFormatVCF        = outputFormat{Print: printVCF, PadLeft: true}
 )
 
 type exporter struct {
@@ -57,7 +59,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	outputFilename := flags.String("o", "-", "output `file`")
 	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
 	outputBed := flags.String("output-bed", "", "also output bed `file`")
-	pick := flags.String("pick", "", "`name` of single genome to export")
+	labelsFilename := flags.String("output-labels", "", "also output genome labels csv `file`")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -103,7 +105,14 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			}
 			*outputBed = "/mnt/output/" + *outputBed
 		}
-		runner.Args = []string{"export", "-local=true", "-pick", *pick, "-ref", *refname, "-output-format", *outputFormatStr, "-output-bed", *outputBed, "-i", *inputFilename, "-o", "/mnt/output/export.csv"}
+		runner.Args = []string{"export", "-local=true",
+			"-ref", *refname,
+			"-output-format", *outputFormatStr,
+			"-output-bed", *outputBed,
+			"-output-labels", "/mnt/output/labels.csv",
+			"-i", *inputFilename,
+			"-o", "/mnt/output/export.csv",
+		}
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -113,11 +122,16 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 0
 	}
 
-	input, err := os.Open(*inputFilename)
+	in, err := open(*inputFilename)
 	if err != nil {
 		return 1
 	}
-	defer input.Close()
+	defer in.Close()
+	input, ok := in.(io.ReadSeeker)
+	if !ok {
+		err = fmt.Errorf("%s: %T cannot seek", *inputFilename, in)
+		return 1
+	}
 
 	// Error out early if seeking doesn't work on the input file.
 	_, err = input.Seek(0, io.SeekEnd)
@@ -129,25 +143,15 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 1
 	}
 
-	var mtx sync.Mutex
 	var cgs []CompactGenome
-	tilelib := tileLibrary{
-		retainNoCalls: true,
+	tilelib := &tileLibrary{
+		retainNoCalls:  true,
+		compactGenomes: map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), func(cg CompactGenome) {
-		if *pick != "" && *pick != cg.Name {
-			return
-		}
-		log.Debugf("export: pick %q", cg.Name)
-		mtx.Lock()
-		defer mtx.Unlock()
-		cgs = append(cgs, cg)
-	})
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
 	if err != nil {
 		return 1
 	}
-	sort.Slice(cgs, func(i, j int) bool { return cgs[i].Name < cgs[j].Name })
-	log.Printf("export: pick %q => %d genomes", *pick, len(cgs))
 
 	refseq, ok := tilelib.refseqs[*refname]
 	if !ok {
@@ -158,6 +162,33 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			return
 		}())
 		return 1
+	}
+
+	names := cgnames(tilelib)
+	for _, name := range names {
+		cgs = append(cgs, CompactGenome{Name: name, Variants: tilelib.compactGenomes[name]})
+	}
+	if *labelsFilename != "" {
+		log.Infof("writing labels to %s", *labelsFilename)
+		var f *os.File
+		f, err = os.OpenFile(*labelsFilename, os.O_CREATE|os.O_WRONLY, 0777)
+		if err != nil {
+			return 1
+		}
+		defer f.Close()
+		_, outBasename := path.Split(*outputFilename)
+		for i, name := range names {
+			_, err = fmt.Fprintf(f, "%d,%q,%q\n", i, trimFilenameForLabel(name), outBasename)
+			if err != nil {
+				err = fmt.Errorf("write %s: %w", *labelsFilename, err)
+				return 1
+			}
+		}
+		err = f.Close()
+		if err != nil {
+			err = fmt.Errorf("close %s: %w", *labelsFilename, err)
+			return 1
+		}
 	}
 
 	_, err = input.Seek(0, io.SeekStart)
@@ -188,7 +219,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		bedbufw = bufio.NewWriter(bedout)
 	}
 
-	err = cmd.export(bufw, bedout, input, strings.HasSuffix(*inputFilename, ".gz"), tilelib.taglib.keylen, refseq, cgs)
+	err = cmd.export(bufw, bedout, input, strings.HasSuffix(*inputFilename, ".gz"), tilelib, refseq, cgs)
 	if err != nil {
 		return 1
 	}
@@ -210,14 +241,14 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			return 1
 		}
 	}
-	err = input.Close()
+	err = in.Close()
 	if err != nil {
 		return 1
 	}
 	return 0
 }
 
-func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, taglen int, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
+func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, tilelib *tileLibrary, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
 	need := map[tileLibRef]bool{}
 	var seqnames []string
 	for seqname, librefs := range refseq {
@@ -244,7 +275,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ta
 	tileVariant := map[tileLibRef]TileVariant{}
 	err := DecodeLibrary(librdr, gz, func(ent *LibraryEntry) error {
 		for _, tv := range ent.TileVariants {
-			libref := tileLibRef{Tag: tv.Tag, Variant: tv.Variant}
+			libref := tilelib.getRef(tv.Tag, tv.Sequence)
 			if need[libref] {
 				tileVariant[libref] = tv
 			}
@@ -285,7 +316,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ta
 		throttle.Acquire()
 		go func() {
 			defer throttle.Release()
-			cmd.exportSeq(outbuf, bedbuf, taglen, seqname, refseq[seqname], tileVariant, cgs)
+			cmd.exportSeq(outbuf, bedbuf, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
 			log.Infof("assembled %q to outbuf %d bedbuf %d", seqname, outbuf.Len(), bedbuf.Len())
 		}()
 	}
@@ -360,7 +391,6 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 						v = v.PadLeft()
 					}
 					v.Position += refpos
-					log.Debugf("%s seq %s phase %d tag %d tile diff %s\n", cg.Name, seqname, phase, libref.Tag, v.String())
 					varslice := variantAt[v.Position]
 					if varslice == nil {
 						varslice = make([]hgvs.Variant, len(cgs)*2)
@@ -475,4 +505,32 @@ func printHGVS(out io.Writer, seqname string, varslice []hgvs.Variant) {
 		}
 	}
 	out.Write([]byte{'\n'})
+}
+
+func printHGVSOneHot(out io.Writer, seqname string, varslice []hgvs.Variant) {
+	vars := map[hgvs.Variant]bool{}
+	for _, v := range varslice {
+		if v.Ref != v.New {
+			vars[v] = true
+		}
+	}
+
+	// sort variants to ensure output is deterministic
+	sorted := make([]hgvs.Variant, 0, len(vars))
+	for v := range vars {
+		sorted = append(sorted, v)
+	}
+	sort.Slice(sorted, func(a, b int) bool { return hgvs.Less(sorted[a], sorted[b]) })
+
+	for _, v := range sorted {
+		fmt.Fprintf(out, "%s.%s", seqname, v.String())
+		for i := 0; i < len(varslice); i += 2 {
+			if varslice[i] == v || varslice[i+1] == v {
+				out.Write([]byte("\t1"))
+			} else {
+				out.Write([]byte("\t0"))
+			}
+		}
+		out.Write([]byte{'\n'})
+	}
 }

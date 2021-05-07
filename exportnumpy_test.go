@@ -9,11 +9,11 @@ import (
 	"gopkg.in/check.v1"
 )
 
-type exportSuite struct{}
+type exportNumpySuite struct{}
 
-var _ = check.Suite(&exportSuite{})
+var _ = check.Suite(&exportNumpySuite{})
 
-func (s *exportSuite) TestFastaToNumpy(c *check.C) {
+func (s *exportNumpySuite) TestFastaToNumpy(c *check.C) {
 	tmpdir := c.MkDir()
 
 	err := ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
@@ -58,7 +58,7 @@ func sortUints(variants []int16) {
 	}
 }
 
-func (s *exportSuite) TestOnehot(c *check.C) {
+func (s *exportNumpySuite) TestOnehot(c *check.C) {
 	for _, trial := range []struct {
 		incols  int
 		in      []int16
