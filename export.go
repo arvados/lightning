@@ -14,6 +14,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -90,7 +91,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         700000000000,
+			RAM:         750000000000,
 			VCPUs:       32,
 			Priority:    *priority,
 		}
@@ -302,12 +303,41 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
-	log.Infof("assembling %d sequences concurrently", len(seqnames))
-	throttle := throttle{Max: 8}
 	outbuf := make([]bytes.Buffer, len(seqnames))
 	bedbuf := make([]bytes.Buffer, len(seqnames))
+	ready := make([]chan struct{}, len(seqnames))
+	for i := range ready {
+		ready[i] = make(chan struct{})
+	}
+
+	var output sync.WaitGroup
+	output.Add(1)
+	go func() {
+		defer output.Done()
+		for i, seqname := range seqnames {
+			<-ready[i]
+			log.Infof("writing outbuf %s", seqname)
+			io.Copy(out, &outbuf[i])
+			log.Infof("writing outbuf %s done", seqname)
+		}
+	}()
+	output.Add(1)
+	go func() {
+		defer output.Done()
+		if bedout != nil {
+			for i, seqname := range seqnames {
+				<-ready[i]
+				log.Infof("writing bedbuf %s", seqname)
+				io.Copy(bedout, &bedbuf[i])
+				log.Infof("writing bedbuf %s done", seqname)
+			}
+		}
+	}()
+
+	throttle := throttle{Max: 4}
+	log.Infof("assembling %d sequences in %d goroutines", len(seqnames), throttle.Max)
 	for seqidx, seqname := range seqnames {
-		seqname := seqname
+		seqidx, seqname := seqidx, seqname
 		outbuf := &outbuf[seqidx]
 		bedbuf := &bedbuf[seqidx]
 		if bedout == nil {
@@ -316,31 +346,13 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		throttle.Acquire()
 		go func() {
 			defer throttle.Release()
+			defer close(ready[seqidx])
 			cmd.exportSeq(outbuf, bedbuf, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
 			log.Infof("assembled %q to outbuf %d bedbuf %d", seqname, outbuf.Len(), bedbuf.Len())
 		}()
 	}
-	throttle.Wait()
 
-	throttle.Acquire()
-	go func() {
-		defer throttle.Release()
-		for i, seqname := range seqnames {
-			log.Infof("writing outbuf %s", seqname)
-			io.Copy(out, &outbuf[i])
-		}
-	}()
-	if bedout != nil {
-		throttle.Acquire()
-		go func() {
-			defer throttle.Release()
-			for i, seqname := range seqnames {
-				log.Infof("writing bedbuf %s", seqname)
-				io.Copy(bedout, &bedbuf[i])
-			}
-		}()
-	}
-	throttle.Wait()
+	output.Wait()
 	return nil
 }
 
