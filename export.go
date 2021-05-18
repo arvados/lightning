@@ -91,8 +91,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         750000000000,
-			VCPUs:       32,
+			RAM:         1600000000000,
+			VCPUs:       64,
 			Priority:    *priority,
 		}
 		err = runner.TranslatePaths(inputFilename)
@@ -303,6 +303,16 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
+	if true {
+		// low memory mode
+		for _, seqname := range seqnames {
+			log.Infof("assembling %q", seqname)
+			cmd.exportSeq(out, bedout, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
+			log.Infof("assembled %q", seqname)
+		}
+		return nil
+	}
+
 	outbuf := make([]bytes.Buffer, len(seqnames))
 	bedbuf := make([]bytes.Buffer, len(seqnames))
 	ready := make([]chan struct{}, len(seqnames))
@@ -334,7 +344,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		}
 	}()
 
-	throttle := throttle{Max: 4}
+	throttle := throttle{Max: 8}
 	log.Infof("assembling %d sequences in %d goroutines", len(seqnames), throttle.Max)
 	for seqidx, seqname := range seqnames {
 		seqidx, seqname := seqidx, seqname
