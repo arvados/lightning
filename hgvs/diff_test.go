@@ -99,6 +99,11 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			b:      "agAAg",
 			expect: []string{"3_4delinsAA"},
 		},
+		{
+			a:      "acgtgaa",
+			b:      "acTtgaa",
+			expect: []string{"3G>T"},
+		},
 	} {
 		c.Log(trial)
 		var vars []string
