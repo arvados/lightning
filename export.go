@@ -303,7 +303,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
-	if true {
+	if false {
 		// low memory mode
 		for _, seqname := range seqnames {
 			log.Infof("assembling %q", seqname)
@@ -329,6 +329,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 			log.Infof("writing outbuf %s", seqname)
 			io.Copy(out, &outbuf[i])
 			log.Infof("writing outbuf %s done", seqname)
+			outbuf[i] = bytes.Buffer{}
 		}
 	}()
 	output.Add(1)
@@ -340,6 +341,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 				log.Infof("writing bedbuf %s", seqname)
 				io.Copy(bedout, &bedbuf[i])
 				log.Infof("writing bedbuf %s done", seqname)
+				bedbuf[i] = bytes.Buffer{}
 			}
 		}
 	}()
