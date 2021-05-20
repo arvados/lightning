@@ -303,68 +303,56 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		return fmt.Errorf("%d needed tiles are missing from library", len(missing))
 	}
 
-	if false {
-		// low memory mode
-		for _, seqname := range seqnames {
-			log.Infof("assembling %q", seqname)
-			cmd.exportSeq(out, bedout, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
-			log.Infof("assembled %q", seqname)
-		}
-		return nil
-	}
+	outw := make([]io.WriteCloser, len(seqnames))
+	bedw := make([]io.WriteCloser, len(seqnames))
 
-	outbuf := make([]bytes.Buffer, len(seqnames))
-	bedbuf := make([]bytes.Buffer, len(seqnames))
-	ready := make([]chan struct{}, len(seqnames))
-	for i := range ready {
-		ready[i] = make(chan struct{})
-	}
-
-	var output sync.WaitGroup
-	output.Add(1)
-	go func() {
-		defer output.Done()
+	var merges sync.WaitGroup
+	merge := func(dst io.Writer, src []io.WriteCloser, label string) {
+		var mtx sync.Mutex
 		for i, seqname := range seqnames {
-			<-ready[i]
-			log.Infof("writing outbuf %s", seqname)
-			io.Copy(out, &outbuf[i])
-			log.Infof("writing outbuf %s done", seqname)
-			outbuf[i] = bytes.Buffer{}
+			pr, pw := io.Pipe()
+			src[i] = pw
+			merges.Add(1)
+			seqname := seqname
+			go func() {
+				defer merges.Done()
+				log.Infof("writing %s %s", seqname, label)
+				scanner := bufio.NewScanner(pr)
+				for scanner.Scan() {
+					mtx.Lock()
+					dst.Write(scanner.Bytes())
+					dst.Write([]byte{'\n'})
+					mtx.Unlock()
+				}
+				log.Infof("writing %s %s done", seqname, label)
+			}()
 		}
-	}()
-	output.Add(1)
-	go func() {
-		defer output.Done()
-		if bedout != nil {
-			for i, seqname := range seqnames {
-				<-ready[i]
-				log.Infof("writing bedbuf %s", seqname)
-				io.Copy(bedout, &bedbuf[i])
-				log.Infof("writing bedbuf %s done", seqname)
-				bedbuf[i] = bytes.Buffer{}
-			}
-		}
-	}()
+	}
+	merge(out, outw, "output")
+	if bedout != nil {
+		merge(bedout, bedw, "bed")
+	}
 
 	throttle := throttle{Max: 8}
 	log.Infof("assembling %d sequences in %d goroutines", len(seqnames), throttle.Max)
 	for seqidx, seqname := range seqnames {
 		seqidx, seqname := seqidx, seqname
-		outbuf := &outbuf[seqidx]
-		bedbuf := &bedbuf[seqidx]
-		if bedout == nil {
-			bedbuf = nil
-		}
+		outw := outw[seqidx]
+		bedw := bedw[seqidx]
 		throttle.Acquire()
 		go func() {
 			defer throttle.Release()
-			defer close(ready[seqidx])
-			cmd.exportSeq(outbuf, bedbuf, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
-			log.Infof("assembled %q to outbuf %d bedbuf %d", seqname, outbuf.Len(), bedbuf.Len())
+			if bedw != nil {
+				defer bedw.Close()
+			}
+			defer outw.Close()
+			outwb := bufio.NewWriter(outw)
+			defer outwb.Flush()
+			cmd.exportSeq(outwb, bedw, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
 		}()
 	}
 
-	output.Wait()
+	merges.Wait()
 	return nil
 }
 
