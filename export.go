@@ -40,6 +40,7 @@ var (
 
 type exporter struct {
 	outputFormat outputFormat
+	maxTileSize  int
 }
 
 func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -62,6 +63,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
 	outputBed := flags.String("output-bed", "", "also output bed `file`")
 	labelsFilename := flags.String("output-labels", "", "also output genome labels csv `file`")
+	flags.IntVar(&cmd.maxTileSize, "max-tile-size", 50000, "don't try to make annotations for tiles bigger than given `size`")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -117,6 +119,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			"-output-format", *outputFormatStr,
 			"-output-bed", *outputBed,
 			"-output-labels", "/mnt/output/labels.csv",
+			"-max-tile-size", fmt.Sprintf("%d", cmd.maxTileSize),
 			"-i", *inputFilename,
 			"-o", "/mnt/output/export.csv",
 		}
@@ -390,12 +393,15 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					// was false during import
 					continue
 				}
+				if len(genometile.Sequence) > cmd.maxTileSize {
+					continue
+				}
 				refSequence := reftile.Sequence
 				// If needed, extend the reference
 				// sequence up to the tag at the end
 				// of the genometile sequence.
 				refstepend := refstep + 1
-				for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genometile.Sequence[len(genometile.Sequence)-taglen:]) {
+				for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genometile.Sequence[len(genometile.Sequence)-taglen:]) && len(refSequence) <= cmd.maxTileSize {
 					if &refSequence[0] == &reftile.Sequence[0] {
 						refSequence = append([]byte(nil), refSequence...)
 					}
