@@ -12,6 +12,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -97,7 +98,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         1600000000000,
+			RAM:         700000000000,
 			VCPUs:       64,
 			Priority:    *priority,
 		}
@@ -342,7 +343,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 		merge(bedout, bedw, "bed")
 	}
 
-	throttle := throttle{Max: 8}
+	throttle := throttle{Max: runtime.NumCPU()}
 	log.Infof("assembling %d sequences in %d goroutines", len(seqnames), throttle.Max)
 	for seqidx, seqname := range seqnames {
 		seqidx, seqname := seqidx, seqname
