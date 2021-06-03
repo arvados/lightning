@@ -125,6 +125,20 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			in[i+1] = ins
 			in[i+2] = eq
 		}
+		// diffmatchpatch solves diff("AXX","XXX") with
+		// [delA,=XX,insX] but we prefer to spell it
+		// [delA,insX,=XX].
+		//
+		// So, when we see a [del,=,ins] sequence that has the
+		// same effect after swapping the "=" and "ins" parts,
+		// we swap them.
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffInsert &&
+			in[i+1].Text+in[i+2].Text == in[i+2].Text+in[i+1].Text {
+			in[i+2], in[i+1] = in[i+1], in[i+2]
+		}
 		out = append(out, d)
 	}
 	return
