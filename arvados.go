@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -282,6 +281,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 	subscribedUUID := ""
 	defer func() {
 		if subscribedUUID != "" {
+			log.Printf("unsubscribe container UUID: %s", subscribedUUID)
 			client.Unsubscribe(logch, subscribedUUID)
 		}
 	}()
@@ -305,8 +305,10 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 			fmt.Fprint(os.Stderr, neednewline)
 			neednewline = ""
 			if subscribedUUID != "" {
+				log.Printf("unsubscribe container UUID: %s", subscribedUUID)
 				client.Unsubscribe(logch, subscribedUUID)
 			}
+			log.Printf("subscribe container UUID: %s", cr.ContainerUUID)
 			client.Subscribe(logch, cr.ContainerUUID)
 			subscribedUUID = cr.ContainerUUID
 		}
@@ -504,6 +506,7 @@ func (gr gzipr) Close() error {
 
 var (
 	arvadosClientFromEnv = arvados.NewClientFromEnv()
+	keepClient           *keepclient.KeepClient
 	siteFS               arvados.CustomFileSystem
 	siteFSMtx            sync.Mutex
 )
@@ -531,13 +534,13 @@ func open(fnm string) (io.ReadCloser, error) {
 			return nil, err
 		}
 		ac.Client = arvados.DefaultSecureClient
-		kc := keepclient.New(ac)
+		keepClient = keepclient.New(ac)
 		// Don't use keepclient's default short timeouts.
-		kc.HTTPClient = arvados.DefaultSecureClient
-		// Guess max concurrent readers, hope to avoid cache
-		// thrashing.
-		kc.BlockCache = &keepclient.BlockCache{MaxBlocks: runtime.NumCPU() * 3}
-		siteFS = arvadosClientFromEnv.SiteFileSystem(kc)
+		keepClient.HTTPClient = arvados.DefaultSecureClient
+		keepClient.BlockCache = &keepclient.BlockCache{MaxBlocks: 4}
+		siteFS = arvadosClientFromEnv.SiteFileSystem(keepClient)
+	} else {
+		keepClient.BlockCache.MaxBlocks++
 	}
 
 	log.Infof("reading %q from %s using Arvados client", fnm[len(mnt):], uuid)

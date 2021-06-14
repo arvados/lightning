@@ -31,7 +31,7 @@ func (s *exportSuite) TestFastaToHGVS(c *check.C) {
 		"-ref=testdata/ref.fasta",
 	}, &buffer, &output, os.Stderr)
 	c.Check(exited, check.Equals, 0)
-	c.Check(output.String(), check.Equals, `chr1.1_3delinsGGC	1	0
+	c.Check(sortLines(output.String()), check.Equals, sortLines(`chr1.1_3delinsGGC	1	0
 chr1.41_42delinsAA	1	0
 chr1.161A>T	1	0
 chr1.178A>T	1	0
@@ -44,7 +44,7 @@ chr2.258_269delinsAA	1	0
 chr2.315C>A	1	0
 chr2.470_472del	1	0
 chr2.471_472delinsAA	1	0
-`)
+`))
 	labels, err := ioutil.ReadFile(tmpdir + "/labels.csv")
 	c.Check(err, check.IsNil)
 	c.Check(string(labels), check.Equals, `0,"input1","-"

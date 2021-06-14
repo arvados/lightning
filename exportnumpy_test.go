@@ -22,10 +22,12 @@ func (s *exportNumpySuite) TestFastaToNumpy(c *check.C) {
 	var buffer bytes.Buffer
 	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/a.1.fasta", "testdata/tinyref.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
-	var output bytes.Buffer
-	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-annotations", tmpdir + "/annotations.csv", "-regions", tmpdir + "/chr1-12-100.bed"}, &buffer, &output, os.Stderr)
+	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-dir", tmpdir, "-output-annotations", tmpdir + "/annotations.csv", "-regions", tmpdir + "/chr1-12-100.bed"}, &buffer, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
-	npy, err := gonpy.NewReader(&output)
+	f, err := os.Open(tmpdir + "/matrix.npy")
+	c.Assert(err, check.IsNil)
+	defer f.Close()
+	npy, err := gonpy.NewReader(f)
 	c.Assert(err, check.IsNil)
 	variants, err := npy.GetInt16()
 	c.Assert(err, check.IsNil)

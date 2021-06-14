@@ -90,7 +90,7 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Check(code, check.Equals, 0)
 	c.Check(hgvsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", hgvsout.String())
-	c.Check(hgvsout.String(), check.Equals, `chr1:g.1_3delinsGGC	.
+	c.Check(sortLines(hgvsout.String()), check.Equals, sortLines(`chr1:g.1_3delinsGGC	.
 chr1:g.[41_42delinsAA];[41=]	.
 chr1:g.[161=];[161A>T]	.
 chr1:g.[178=];[178A>T]	.
@@ -103,14 +103,14 @@ chr2:g.[258_269delinsAA];[258=]	.
 chr2:g.[315C>A];[315=]	.
 chr2:g.[470_472del];[470=]	.
 chr2:g.[471=];[471_472delinsAA]	.
-`)
+`))
 
 	vcfout := &bytes.Buffer{}
 	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "vcf", "-i", tmpdir + "/merged.gob", "-output-bed", tmpdir + "/export.bed"}, bytes.NewReader(nil), vcfout, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	c.Check(vcfout.Len() > 0, check.Equals, true)
 	c.Logf("%s", vcfout.String())
-	c.Check(vcfout.String(), check.Equals, `chr1	1	NNN	GGC	1/1	0/0
+	c.Check(sortLines(vcfout.String()), check.Equals, sortLines(`chr1	1	NNN	GGC	1/1	0/0
 chr1	41	TT	AA	1/0	0/0
 chr1	161	A	T	0/1	0/0
 chr1	178	A	T	0/1	0/0
@@ -123,11 +123,11 @@ chr2	258	CCTTGTATTTTT	AA	1/0	0/0
 chr2	315	C	A	1/0	0/0
 chr2	469	GTGG	G	1/0	0/0
 chr2	471	GG	AA	0/1	0/0
-`)
+`))
 	bedout, err := ioutil.ReadFile(tmpdir + "/export.bed")
 	c.Check(err, check.IsNil)
 	c.Logf("%s", string(bedout))
-	c.Check(string(bedout), check.Equals, `chr1 0 248 0 1000 . 0 224
+	c.Check(sortLines(string(bedout)), check.Equals, sortLines(`chr1 0 248 0 1000 . 0 224
 chr1 224 372 1 1000 . 248 348
 chr1 348 496 2 1000 . 372 472
 chr1 472 572 3 1000 . 496 572
@@ -135,7 +135,7 @@ chr2 0 248 4 1000 . 0 224
 chr2 224 372 5 750 . 248 348
 chr2 348 496 6 1000 . 372 472
 chr2 472 572 7 1000 . 496 572
-`)
+`))
 
 	annotateout := &bytes.Buffer{}
 	code = (&annotatecmd{}).RunCommand("lightning annotate", []string{"-local", "-variant-hash=true", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), annotateout, os.Stderr)

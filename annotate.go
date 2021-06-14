@@ -23,10 +23,11 @@ import (
 )
 
 type annotatecmd struct {
-	dropTiles   []bool
-	variantHash bool
-	maxTileSize int
-	tag2tagid   map[string]tagID
+	dropTiles        []bool
+	variantHash      bool
+	maxTileSize      int
+	tag2tagid        map[string]tagID
+	reportAnnotation func(tag tagID, outcol int, variant tileVariantID, refname string, seqname string, pdi hgvs.Variant)
 }
 
 func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -242,13 +243,10 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 		outcol := outcol
 		refstart, ok := tilestart[tag]
 		if !ok {
-			// Tag didn't place on this
-			// reference sequence. (It
-			// might place on the same
-			// chromosome in a genome
-			// anyway, but we don't output
-			// the annotations that would
-			// result.)
+			// Tag didn't place on this reference
+			// sequence. (It might place on the same
+			// chromosome in a genome anyway, but we don't
+			// output the annotations that would result.)
 			// outch <- fmt.Sprintf("%d,%d,-1%s\n", tag, outcol, refnamefield)
 			continue
 		}
@@ -299,6 +297,9 @@ func (cmd *annotatecmd) annotateSequence(throttle *throttle, outch chan<- string
 						varid = fmt.Sprintf("%d", variant)
 					}
 					outch <- fmt.Sprintf("%d,%d,%s%s,%s:g.%s\n", tag, outcol, varid, refnamefield, seqname, diff.String())
+					if cmd.reportAnnotation != nil {
+						cmd.reportAnnotation(tag, outcol, variant, refname, seqname, diff)
+					}
 				}
 			}()
 		}
