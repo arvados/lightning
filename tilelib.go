@@ -594,18 +594,30 @@ func (tilelib *tileLibrary) Tidy() {
 	// Apply remap to genomes and reference sequences, so they
 	// refer to the same tile variants using the changed IDs.
 	log.Print("Tidy: apply remap")
+	var wg sync.WaitGroup
 	for _, cg := range tilelib.compactGenomes {
-		for idx, variant := range cg {
-			cg[idx] = remap[tagID(idx/2)][variant]
-		}
+		cg := cg
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx, variant := range cg {
+				cg[idx] = remap[tagID(idx/2)][variant]
+			}
+		}()
 	}
 	for _, refcs := range tilelib.refseqs {
 		for _, refseq := range refcs {
-			for i, tv := range refseq {
-				refseq[i].Variant = remap[tv.Tag][tv.Variant]
-			}
+			refseq := refseq
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i, tv := range refseq {
+					refseq[i].Variant = remap[tv.Tag][tv.Variant]
+				}
+			}()
 		}
 	}
+	wg.Wait()
 	log.Print("Tidy: done")
 }
 
