@@ -48,7 +48,7 @@ func DecodeLibrary(rdr io.Reader, gz bool, cb func(*LibraryEntry) error) error {
 	zrdr := ioutil.NopCloser(rdr)
 	var err error
 	if gz {
-		zrdr, err = pgzip.NewReader(bufio.NewReaderSize(rdr, 1<<26))
+		zrdr, err = pgzip.NewReader(bufio.NewReaderSize(rdr, 1<<20))
 		if err != nil {
 			return err
 		}

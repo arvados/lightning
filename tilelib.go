@@ -227,17 +227,18 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 		for _, fi := range fis {
 			if fi.Name() == "." || fi.Name() == ".." {
 				continue
-			} else if fi.IsDir() {
-				err = walk(path + "/" + fi.Name())
+			} else if child := path + "/" + fi.Name(); fi.IsDir() {
+				err = walk(child)
 				if err != nil {
 					return err
 				}
-			} else if strings.HasSuffix(path, ".gob") || strings.HasSuffix(path, ".gob.gz") {
-				files = append(files, path)
+			} else if strings.HasSuffix(child, ".gob") || strings.HasSuffix(child, ".gob.gz") {
+				files = append(files, child)
 			}
 		}
 		return nil
 	}
+	log.Infof("LoadDir: walk dir %s", path)
 	err := walk(path)
 	if err != nil {
 		return err
@@ -249,6 +250,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 	cseqs := []CompactSequence{}
 	variantmap := map[tileLibRef]tileVariantID{}
 	errs := make(chan error, len(files))
+	log.Infof("LoadDir: read %d files", len(files))
 	for _, path := range files {
 		path := path
 		go func() {
@@ -264,8 +266,13 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 				}
 				mtx.Lock()
 				defer mtx.Unlock()
-				if err := tilelib.loadTagSet(ent.TagSet); err != nil {
-					return err
+				if tilelib.taglib == nil || tilelib.taglib.Len() != len(ent.TagSet) {
+					// load first set of tags, or
+					// report mismatch if 2 sets
+					// have different #tags.
+					if err := tilelib.loadTagSet(ent.TagSet); err != nil {
+						return err
+					}
 				}
 				if err := tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
 					return err
@@ -282,14 +289,17 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 			return err
 		}
 	}
+	log.Info("LoadDir: loadCompactGenomes")
 	err = tilelib.loadCompactGenomes(cgs, variantmap, onLoadGenome)
 	if err != nil {
 		return err
 	}
+	log.Info("LoadDir: loadCompactSequences")
 	err = tilelib.loadCompactSequences(cseqs, variantmap)
 	if err != nil {
 		return err
 	}
+	log.Info("LoadDir done")
 	return nil
 }
 

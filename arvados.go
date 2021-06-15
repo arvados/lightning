@@ -528,8 +528,8 @@ func open(fnm string) (file, error) {
 		return os.Open(fnm)
 	}
 	uuid := m[2]
-	mnt := "/mnt/" + uuid + "/"
-	if !strings.HasPrefix(fnm, mnt) {
+	mnt := "/mnt/" + uuid
+	if fnm != mnt && !strings.HasPrefix(fnm, mnt+"/") {
 		return os.Open(fnm)
 	}
 
@@ -552,5 +552,5 @@ func open(fnm string) (file, error) {
 	}
 
 	log.Infof("reading %q from %s using Arvados client", fnm[len(mnt):], uuid)
-	return siteFS.Open("by_id/" + uuid + "/" + fnm[len(mnt):])
+	return siteFS.Open("by_id/" + uuid + fnm[len(mnt):])
 }
