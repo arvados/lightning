@@ -24,6 +24,7 @@ var (
 		"annotate":           &annotatecmd{},
 		"export":             &exporter{},
 		"export-numpy":       &exportNumpy{},
+		"flake":              &flakecmd{},
 		"numpy-comvar":       &numpyComVar{},
 		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},

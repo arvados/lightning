@@ -267,6 +267,9 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 				Preemptible: true,
 				Partitions:  []string{},
 			},
+			"environment": map[string]string{
+				"GOMAXPROCS": fmt.Sprintf("%d", rc.VCPUs),
+			},
 		},
 	})
 	if err != nil {
@@ -511,7 +514,12 @@ var (
 	siteFSMtx            sync.Mutex
 )
 
-func open(fnm string) (io.ReadCloser, error) {
+type file interface {
+	io.ReadCloser
+	Readdir(n int) ([]os.FileInfo, error)
+}
+
+func open(fnm string) (file, error) {
 	if os.Getenv("ARVADOS_API_HOST") == "" {
 		return os.Open(fnm)
 	}

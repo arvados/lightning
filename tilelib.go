@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"runtime"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/klauspost/pgzip"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 )
@@ -204,6 +206,186 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	}
 	for _, cseq := range cseqs {
 		tilelib.refseqs[cseq.Name] = cseq.TileSequences
+	}
+	return nil
+}
+
+func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGenome func(CompactGenome)) error {
+	var files []string
+	var walk func(string) error
+	walk = func(path string) error {
+		f, err := open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fis, err := f.Readdir(-1)
+		if err != nil {
+			files = append(files, path)
+			return nil
+		}
+		for _, fi := range fis {
+			if fi.Name() == "." || fi.Name() == ".." {
+				continue
+			} else if fi.IsDir() {
+				err = walk(path + "/" + fi.Name())
+				if err != nil {
+					return err
+				}
+			} else if strings.HasSuffix(path, ".gob") || strings.HasSuffix(path, ".gob.gz") {
+				files = append(files, path)
+			}
+		}
+		return nil
+	}
+	err := walk(path)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var mtx sync.Mutex
+	cgs := []CompactGenome{}
+	cseqs := []CompactSequence{}
+	variantmap := map[tileLibRef]tileVariantID{}
+	errs := make(chan error, len(files))
+	for _, path := range files {
+		path := path
+		go func() {
+			f, err := open(path)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer f.Close()
+			errs <- DecodeLibrary(f, strings.HasSuffix(path, ".gz"), func(ent *LibraryEntry) error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				mtx.Lock()
+				defer mtx.Unlock()
+				if err := tilelib.loadTagSet(ent.TagSet); err != nil {
+					return err
+				}
+				if err := tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
+					return err
+				}
+				cgs = append(cgs, ent.CompactGenomes...)
+				cseqs = append(cseqs, ent.CompactSequences...)
+				return nil
+			})
+		}()
+	}
+	for range files {
+		err := <-errs
+		if err != nil {
+			return err
+		}
+	}
+	err = tilelib.loadCompactGenomes(cgs, variantmap, onLoadGenome)
+	if err != nil {
+		return err
+	}
+	err = tilelib.loadCompactSequences(cseqs, variantmap)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tilelib *tileLibrary) WriteDir(dir string) error {
+	nfiles := 128
+	files := make([]*os.File, nfiles)
+	for i := range files {
+		f, err := os.OpenFile(fmt.Sprintf("%s/library.%04d.gob.gz", dir, i), os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		files[i] = f
+	}
+	bufws := make([]*bufio.Writer, nfiles)
+	for i := range bufws {
+		bufws[i] = bufio.NewWriterSize(files[i], 1<<26)
+	}
+	zws := make([]*pgzip.Writer, nfiles)
+	for i := range zws {
+		zws[i] = pgzip.NewWriter(bufws[i])
+		defer zws[i].Close()
+	}
+	encoders := make([]*gob.Encoder, nfiles)
+	for i := range encoders {
+		encoders[i] = gob.NewEncoder(zws[i])
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errs := make(chan error, nfiles)
+	for start := range files {
+		start := start
+		go func() {
+			ent0 := LibraryEntry{
+				TagSet: tilelib.taglib.Tags(),
+			}
+			if start == 0 {
+				// For now, just write all the genomes and refs
+				// to the first file
+				for name, cg := range tilelib.compactGenomes {
+					ent0.CompactGenomes = append(ent0.CompactGenomes, CompactGenome{
+						Name:     name,
+						Variants: cg,
+					})
+				}
+				for name, tseqs := range tilelib.refseqs {
+					ent0.CompactSequences = append(ent0.CompactSequences, CompactSequence{
+						Name:          name,
+						TileSequences: tseqs,
+					})
+				}
+			}
+			err := encoders[start].Encode(ent0)
+			if err != nil {
+				errs <- err
+				return
+			}
+			tvs := []TileVariant{}
+			for tag := start; tag < len(tilelib.variant) && ctx.Err() == nil; tag += nfiles {
+				tvs = tvs[:0]
+				for idx, hash := range tilelib.variant[tag] {
+					tvs = append(tvs, TileVariant{
+						Tag:      tagID(tag),
+						Variant:  tileVariantID(idx + 1),
+						Blake2b:  hash,
+						Sequence: tilelib.seq[hash],
+					})
+				}
+				err := encoders[start].Encode(LibraryEntry{TileVariants: tvs})
+				if err != nil {
+					errs <- err
+					return
+				}
+			}
+			errs <- nil
+		}()
+	}
+	for range files {
+		err := <-errs
+		if err != nil {
+			return err
+		}
+	}
+	for i := range zws {
+		err := zws[i].Close()
+		if err != nil {
+			return err
+		}
+		err = bufws[i].Flush()
+		if err != nil {
+			return err
+		}
+		err = files[i].Close()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
