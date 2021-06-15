@@ -51,7 +51,7 @@ func (cmd *flakecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning flake",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         500000000000,
+			RAM:         700000000000,
 			VCPUs:       96,
 			Priority:    *priority,
 			KeepCache:   2,

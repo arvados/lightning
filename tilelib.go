@@ -323,29 +323,34 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 	for start := range files {
 		start := start
 		go func() {
-			ent0 := LibraryEntry{
-				TagSet: tilelib.taglib.Tags(),
+			err := encoders[start].Encode(LibraryEntry{TagSet: tilelib.taglib.Tags()})
+			if err != nil {
+				errs <- err
+				return
 			}
 			if start == 0 {
 				// For now, just write all the genomes and refs
 				// to the first file
 				for name, cg := range tilelib.compactGenomes {
-					ent0.CompactGenomes = append(ent0.CompactGenomes, CompactGenome{
+					err := encoders[start].Encode(LibraryEntry{CompactGenomes: []CompactGenome{{
 						Name:     name,
 						Variants: cg,
-					})
+					}}})
+					if err != nil {
+						errs <- err
+						return
+					}
 				}
 				for name, tseqs := range tilelib.refseqs {
-					ent0.CompactSequences = append(ent0.CompactSequences, CompactSequence{
+					err := encoders[start].Encode(LibraryEntry{CompactSequences: []CompactSequence{{
 						Name:          name,
 						TileSequences: tseqs,
-					})
+					}}})
+					if err != nil {
+						errs <- err
+						return
+					}
 				}
-			}
-			err := encoders[start].Encode(ent0)
-			if err != nil {
-				errs <- err
-				return
 			}
 			tvs := []TileVariant{}
 			for tag := start; tag < len(tilelib.variant) && ctx.Err() == nil; tag += nfiles {
