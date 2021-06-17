@@ -251,7 +251,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 	variantmap := map[tileLibRef]tileVariantID{}
 	errs := make(chan error, len(files))
 	log.Infof("LoadDir: read %d files", len(files))
-	throttle := throttle{Max: runtime.GOMAXPROCS(0)/2 + 1}
+	throttle := throttle{Max: runtime.GOMAXPROCS(0)}
 	for _, path := range files {
 		path := path
 		go func() {
