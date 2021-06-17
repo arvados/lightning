@@ -42,8 +42,8 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
-	inputFilename := flags.String("i", "-", "input `file`")
-	outputDir := flags.String("output-dir", "/tmp", "output `directory`")
+	inputDir := flags.String("input-dir", "./in", "input `directory`")
+	outputDir := flags.String("output-dir", "./out", "output `directory`")
 	annotationsFilename := flags.String("output-annotations", "", "output `file` for tile variant annotations csv")
 	librefsFilename := flags.String("output-onehot2tilevar", "", "when using -one-hot, create csv `file` mapping column# to tag# and variant#")
 	labelsFilename := flags.String("output-labels", "", "output `file` for genome labels csv")
@@ -77,14 +77,14 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			KeepCache:   1,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputFilename, regionsFilename)
+		err = runner.TranslatePaths(inputDir, regionsFilename)
 		if err != nil {
 			return 1
 		}
 		runner.Args = []string{"export-numpy", "-local=true",
 			"-pprof", ":6060",
 			fmt.Sprintf("-one-hot=%v", *onehot),
-			"-i", *inputFilename,
+			"-input-dir", *inputDir,
 			"-output-dir", "/mnt/output",
 			"-output-annotations", "/mnt/output/annotations.csv",
 			"-output-onehot2tilevar", "/mnt/output/onehot2tilevar.csv",
@@ -105,27 +105,12 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 		return 0
 	}
 
-	var input io.ReadCloser
-	if *inputFilename == "-" {
-		input = ioutil.NopCloser(stdin)
-	} else {
-		input, err = open(*inputFilename)
-		if err != nil {
-			return 1
-		}
-		defer input.Close()
-	}
-	input = ioutil.NopCloser(bufio.NewReaderSize(input, 8*1024*1024))
 	tilelib := &tileLibrary{
 		retainNoCalls:       true,
 		retainTileSequences: true,
 		compactGenomes:      map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
-	if err != nil {
-		return 1
-	}
-	err = input.Close()
+	err = tilelib.LoadDir(context.Background(), *inputDir, nil)
 	if err != nil {
 		return 1
 	}
