@@ -260,25 +260,35 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 				return
 			}
 			defer f.Close()
+			defer log.Infof("LoadDir: finished reading %s", path)
 			errs <- DecodeLibrary(f, strings.HasSuffix(path, ".gz"), func(ent *LibraryEntry) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				mtx.Lock()
-				defer mtx.Unlock()
-				if tilelib.taglib == nil || tilelib.taglib.Len() != len(ent.TagSet) {
-					// load first set of tags, or
-					// report mismatch if 2 sets
-					// have different #tags.
-					if err := tilelib.loadTagSet(ent.TagSet); err != nil {
-						return err
+				if len(ent.TagSet) > 0 {
+					mtx.Lock()
+					if tilelib.taglib == nil || tilelib.taglib.Len() != len(ent.TagSet) {
+						// load first set of tags, or
+						// report mismatch if 2 sets
+						// have different #tags.
+						if err := tilelib.loadTagSet(ent.TagSet); err != nil {
+							mtx.Unlock()
+							return err
+						}
 					}
+					mtx.Unlock()
 				}
-				if err := tilelib.loadTileVariants(ent.TileVariants, variantmap); err != nil {
-					return err
+				variantmapadd := map[tileLibRef]tileVariantID{}
+				for _, tv := range ent.TileVariants {
+					variantmapadd[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).Variant
 				}
+				mtx.Lock()
 				cgs = append(cgs, ent.CompactGenomes...)
 				cseqs = append(cseqs, ent.CompactSequences...)
+				for k, v := range variantmapadd {
+					variantmap[k] = v
+				}
+				mtx.Unlock()
 				return nil
 			})
 		}()
@@ -327,6 +337,8 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 	for i := range encoders {
 		encoders[i] = gob.NewEncoder(zws[i])
 	}
+
+	log.Infof("WriteDir: writing %d files", nfiles)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errs := make(chan error, nfiles)
@@ -388,6 +400,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 			return err
 		}
 	}
+	log.Info("WriteDir: flushing")
 	for i := range zws {
 		err := zws[i].Close()
 		if err != nil {
@@ -402,6 +415,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 			return err
 		}
 	}
+	log.Info("WriteDir: done")
 	return nil
 }
 
