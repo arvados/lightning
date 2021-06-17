@@ -248,7 +248,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 	var mtx sync.Mutex
 	allcgs := make([][]CompactGenome, len(files))
 	allcseqs := make([][]CompactSequence, len(files))
-	allvariantmap := make([]map[tileLibRef]tileVariantID, len(files))
+	allvariantmap := map[tileLibRef]tileVariantID{}
 	errs := make(chan error, len(files))
 	log.Infof("LoadDir: read %d files", len(files))
 	for fileno, path := range files {
@@ -291,7 +291,11 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 			})
 			allcgs[fileno] = cgs
 			allcseqs[fileno] = cseqs
-			allvariantmap[fileno] = variantmap
+			mtx.Lock()
+			defer mtx.Unlock()
+			for k, v := range variantmap {
+				allvariantmap[k] = v
+			}
 		}()
 	}
 	for range files {
@@ -300,27 +304,27 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 			return err
 		}
 	}
-	log.Info("LoadDir: merge variantmap")
-	variantmap := map[tileLibRef]tileVariantID{}
-	for _, m := range allvariantmap {
-		for k, v := range m {
-			variantmap[k] = v
-		}
-	}
+
 	log.Info("LoadDir: loadCompactGenomes")
+	var flatcgs []CompactGenome
 	for _, cgs := range allcgs {
-		err = tilelib.loadCompactGenomes(cgs, variantmap, onLoadGenome)
-		if err != nil {
-			return err
-		}
+		flatcgs = append(flatcgs, cgs...)
 	}
+	err = tilelib.loadCompactGenomes(flatcgs, allvariantmap, onLoadGenome)
+	if err != nil {
+		return err
+	}
+
 	log.Info("LoadDir: loadCompactSequences")
+	var flatcseqs []CompactSequence
 	for _, cseqs := range allcseqs {
-		err = tilelib.loadCompactSequences(cseqs, variantmap)
-		if err != nil {
-			return err
-		}
+		flatcseqs = append(flatcseqs, cseqs...)
 	}
+	err = tilelib.loadCompactSequences(flatcseqs, allvariantmap)
+	if err != nil {
+		return err
+	}
+
 	log.Info("LoadDir done")
 	return nil
 }
