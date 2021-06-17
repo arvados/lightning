@@ -20,9 +20,9 @@ func (s *exportNumpySuite) TestFastaToNumpy(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	var buffer bytes.Buffer
-	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/a.1.fasta", "testdata/tinyref.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
+	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-o", tmpdir + "/library.gob.gz", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/a.1.fasta", "testdata/tinyref.fasta"}, &bytes.Buffer{}, os.Stderr, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
-	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-output-dir", tmpdir, "-output-annotations", tmpdir + "/annotations.csv", "-regions", tmpdir + "/chr1-12-100.bed"}, &buffer, os.Stderr, os.Stderr)
+	exited = (&exportNumpy{}).RunCommand("export-numpy", []string{"-local=true", "-input-dir", tmpdir, "-output-dir", tmpdir, "-output-annotations", tmpdir + "/annotations.csv", "-regions", tmpdir + "/chr1-12-100.bed"}, &buffer, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	f, err := os.Open(tmpdir + "/matrix.npy")
 	c.Assert(err, check.IsNil)
