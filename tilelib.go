@@ -338,6 +338,12 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 		encoders[i] = gob.NewEncoder(zws[i])
 	}
 
+	cgnames := make([]string, 0, len(tilelib.compactGenomes))
+	for name := range tilelib.compactGenomes {
+		cgnames = append(cgnames, name)
+	}
+	sort.Strings(cgnames)
+
 	log.Infof("WriteDir: writing %d files", nfiles)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -351,18 +357,8 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 				return
 			}
 			if start == 0 {
-				// For now, just write all the genomes and refs
-				// to the first file
-				for name, cg := range tilelib.compactGenomes {
-					err := encoders[start].Encode(LibraryEntry{CompactGenomes: []CompactGenome{{
-						Name:     name,
-						Variants: cg,
-					}}})
-					if err != nil {
-						errs <- err
-						return
-					}
-				}
+				// For now, just write all the refs to
+				// the first file
 				for name, tseqs := range tilelib.refseqs {
 					err := encoders[start].Encode(LibraryEntry{CompactSequences: []CompactSequence{{
 						Name:          name,
@@ -372,6 +368,16 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 						errs <- err
 						return
 					}
+				}
+			}
+			for i := start; i < len(cgnames); i += nfiles {
+				err := encoders[start].Encode(LibraryEntry{CompactGenomes: []CompactGenome{{
+					Name:     cgnames[i],
+					Variants: tilelib.compactGenomes[cgnames[i]],
+				}}})
+				if err != nil {
+					errs <- err
+					return
 				}
 			}
 			tvs := []TileVariant{}
