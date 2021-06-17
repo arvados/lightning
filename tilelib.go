@@ -143,7 +143,7 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 					}
 					return
 				}
-				log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", cg.Name, tag, variant, newvariant)
+				// log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", cg.Name, tag, variant, newvariant)
 				cg.Variants[i] = newvariant
 			}
 			if onLoadGenome != nil {
