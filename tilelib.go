@@ -62,9 +62,9 @@ type tileLibrary struct {
 	variant        [][][blake2b.Size256]byte
 	refseqs        map[string]map[string][]tileLibRef
 	compactGenomes map[string][]tileVariantID
-	// count [][]int
-	seq      map[[blake2b.Size256]byte][]byte
-	variants int64
+	seq2           map[[2]byte]map[[blake2b.Size256]byte][]byte
+	seq2lock       map[[2]byte]sync.Locker
+	variants       int64
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
 
@@ -391,7 +391,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 						Tag:      tagID(tag),
 						Variant:  tileVariantID(idx + 1),
 						Blake2b:  hash,
-						Sequence: tilelib.seq[hash],
+						Sequence: tilelib.hashSequence(hash),
 					})
 				}
 				err := encoders[start].Encode(LibraryEntry{TileVariants: tvs})
@@ -714,12 +714,30 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 
 	if tilelib.retainTileSequences && !dropSeq {
 		seqCopy := append([]byte(nil), seq...)
-		tilelib.mtx.Lock()
-		if tilelib.seq == nil {
-			tilelib.seq = map[[blake2b.Size256]byte][]byte{}
+		if tilelib.seq2 == nil {
+			tilelib.mtx.Lock()
+			if tilelib.seq2 == nil {
+				tilelib.seq2lock = map[[2]byte]sync.Locker{}
+				m := map[[2]byte]map[[blake2b.Size256]byte][]byte{}
+				var k [2]byte
+				for i := 0; i < 256; i++ {
+					k[0] = byte(i)
+					for j := 0; j < 256; j++ {
+						k[1] = byte(j)
+						m[k] = map[[blake2b.Size256]byte][]byte{}
+						tilelib.seq2lock[k] = &sync.Mutex{}
+					}
+				}
+				tilelib.seq2 = m
+			}
+			tilelib.mtx.Unlock()
 		}
-		tilelib.seq[seqhash] = seqCopy
-		tilelib.mtx.Unlock()
+		var k [2]byte
+		copy(k[:], seqhash[:])
+		locker := tilelib.seq2lock[k]
+		locker.Lock()
+		tilelib.seq2[k][seqhash] = seqCopy
+		locker.Unlock()
 	}
 
 	if tilelib.encoder != nil {
@@ -740,11 +758,17 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	return tileLibRef{Tag: tag, Variant: variant}
 }
 
+func (tilelib *tileLibrary) hashSequence(hash [blake2b.Size256]byte) []byte {
+	var partition [2]byte
+	copy(partition[:], hash[:])
+	return tilelib.seq2[partition][hash]
+}
+
 func (tilelib *tileLibrary) TileVariantSequence(libref tileLibRef) []byte {
 	if libref.Variant == 0 || len(tilelib.variant) <= int(libref.Tag) || len(tilelib.variant[libref.Tag]) < int(libref.Variant) {
 		return nil
 	}
-	return tilelib.seq[tilelib.variant[libref.Tag][libref.Variant-1]]
+	return tilelib.hashSequence(tilelib.variant[libref.Tag][libref.Variant-1])
 }
 
 // Tidy deletes unreferenced tile variants and renumbers variants so

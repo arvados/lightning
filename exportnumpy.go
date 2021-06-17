@@ -357,7 +357,7 @@ func lowqual(tilelib *tileLibrary) (lowqual []map[tileVariantID]bool) {
 	for tag, variants := range tilelib.variant {
 		lq := lowqual[tag]
 		for varidx, hash := range variants {
-			if len(tilelib.seq[hash]) == 0 {
+			if len(tilelib.hashSequence(hash)) == 0 {
 				if lq == nil {
 					lq = map[tileVariantID]bool{}
 					lowqual[tag] = lq
