@@ -251,9 +251,12 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 	variantmap := map[tileLibRef]tileVariantID{}
 	errs := make(chan error, len(files))
 	log.Infof("LoadDir: read %d files", len(files))
+	throttle := throttle{Max: runtime.GOMAXPROCS(0)/2 + 1}
 	for _, path := range files {
 		path := path
 		go func() {
+			throttle.Acquire()
+			defer throttle.Release()
 			f, err := open(path)
 			if err != nil {
 				errs <- err
