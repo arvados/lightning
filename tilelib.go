@@ -713,11 +713,12 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 	vlock.Unlock()
 
 	if tilelib.retainTileSequences && !dropSeq {
+		seqCopy := append([]byte(nil), seq...)
 		tilelib.mtx.Lock()
 		if tilelib.seq == nil {
 			tilelib.seq = map[[blake2b.Size256]byte][]byte{}
 		}
-		tilelib.seq[seqhash] = append([]byte(nil), seq...)
+		tilelib.seq[seqhash] = seqCopy
 		tilelib.mtx.Unlock()
 	}
 
