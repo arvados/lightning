@@ -265,7 +265,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 			var variantmap = map[tileLibRef]tileVariantID{}
 			var cgs []CompactGenome
 			var cseqs []CompactSequence
-			errs <- DecodeLibrary(f, strings.HasSuffix(path, ".gz"), func(ent *LibraryEntry) error {
+			err := DecodeLibrary(f, strings.HasSuffix(path, ".gz"), func(ent *LibraryEntry) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
@@ -296,6 +296,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 			for k, v := range variantmap {
 				allvariantmap[k] = v
 			}
+			errs <- err
 		}()
 	}
 	for range files {
