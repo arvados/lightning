@@ -11,7 +11,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -24,8 +24,9 @@ import (
 )
 
 type outputFormat struct {
-	Print   func(out io.Writer, seqname string, varslice []hgvs.Variant)
-	PadLeft bool
+	Filename string
+	Print    func(out io.Writer, seqname string, varslice []hgvs.Variant)
+	PadLeft  bool
 }
 
 var (
@@ -34,14 +35,15 @@ var (
 		"hgvs":        outputFormatHGVS,
 		"vcf":         outputFormatVCF,
 	}
-	outputFormatHGVS       = outputFormat{Print: printHGVS}
-	outputFormatHGVSOneHot = outputFormat{Print: printHGVSOneHot}
-	outputFormatVCF        = outputFormat{Print: printVCF, PadLeft: true}
+	outputFormatHGVS       = outputFormat{Filename: "out.csv", Print: printHGVS}
+	outputFormatHGVSOneHot = outputFormat{Filename: "out.csv", Print: printHGVSOneHot}
+	outputFormatVCF        = outputFormat{Filename: "out.vcf", Print: printVCF, PadLeft: true}
 )
 
 type exporter struct {
-	outputFormat outputFormat
-	maxTileSize  int
+	outputFormat   outputFormat
+	outputPerChrom bool
+	maxTileSize    int
 }
 
 func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -59,10 +61,11 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
 	refname := flags.String("ref", "", "reference genome `name`")
-	inputFilename := flags.String("i", "-", "input `file` (library)")
-	outputFilename := flags.String("o", "-", "output `file`")
+	inputDir := flags.String("input-dir", ".", "input `directory`")
+	outputDir := flags.String("output-dir", ".", "output `directory`")
 	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
 	outputBed := flags.String("output-bed", "", "also output bed `file`")
+	flags.BoolVar(&cmd.outputPerChrom, "output-per-chromosome", true, "output one file per chromosome")
 	labelsFilename := flags.String("output-labels", "", "also output genome labels csv `file`")
 	flags.IntVar(&cmd.maxTileSize, "max-tile-size", 50000, "don't try to make annotations for tiles bigger than given `size`")
 	err = flags.Parse(args)
@@ -70,6 +73,10 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		err = nil
 		return 0
 	} else if err != nil {
+		return 2
+	}
+	if flag.NArg() > 0 {
+		err = fmt.Errorf("extra unparsed command line arguments: %q", flag.Args())
 		return 2
 	}
 
@@ -90,8 +97,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	}
 
 	if !*runlocal {
-		if *outputFilename != "-" {
-			err = errors.New("cannot specify output file in container mode: not implemented")
+		if *outputDir != "." {
+			err = errors.New("cannot specify output directory in container mode: not implemented")
 			return 1
 		}
 		runner := arvadosContainerRunner{
@@ -102,7 +109,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			VCPUs:       64,
 			Priority:    *priority,
 		}
-		err = runner.TranslatePaths(inputFilename)
+		err = runner.TranslatePaths(inputDir)
 		if err != nil {
 			return 1
 		}
@@ -120,9 +127,10 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			"-output-format", *outputFormatStr,
 			"-output-bed", *outputBed,
 			"-output-labels", "/mnt/output/labels.csv",
+			"-output-per-chromosome=" + fmt.Sprintf("%v", cmd.outputPerChrom),
 			"-max-tile-size", fmt.Sprintf("%d", cmd.maxTileSize),
-			"-i", *inputFilename,
-			"-o", "/mnt/output/export.csv",
+			"-input-dir", *inputDir,
+			"-output-dir", "/mnt/output",
 		}
 		var output string
 		output, err = runner.Run()
@@ -133,33 +141,13 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 0
 	}
 
-	in, err := open(*inputFilename)
-	if err != nil {
-		return 1
-	}
-	defer in.Close()
-	input, ok := in.(io.ReadSeeker)
-	if !ok {
-		err = fmt.Errorf("%s: %T cannot seek", *inputFilename, in)
-		return 1
-	}
-
-	// Error out early if seeking doesn't work on the input file.
-	_, err = input.Seek(0, io.SeekEnd)
-	if err != nil {
-		return 1
-	}
-	_, err = input.Seek(0, io.SeekStart)
-	if err != nil {
-		return 1
-	}
-
 	var cgs []CompactGenome
 	tilelib := &tileLibrary{
-		retainNoCalls:  true,
-		compactGenomes: map[string][]tileVariantID{},
+		retainNoCalls:       true,
+		retainTileSequences: true,
+		compactGenomes:      map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
+	err = tilelib.LoadDir(context.Background(), *inputDir, nil)
 	if err != nil {
 		return 1
 	}
@@ -187,9 +175,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			return 1
 		}
 		defer f.Close()
-		_, outBasename := path.Split(*outputFilename)
 		for i, name := range names {
-			_, err = fmt.Fprintf(f, "%d,%q,%q\n", i, trimFilenameForLabel(name), outBasename)
+			_, err = fmt.Fprintf(f, "%d,%q,%q\n", i, trimFilenameForLabel(name), cmd.outputFormat.Filename)
 			if err != nil {
 				err = fmt.Errorf("write %s: %w", *labelsFilename, err)
 				return 1
@@ -202,23 +189,6 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		}
 	}
 
-	_, err = input.Seek(0, io.SeekStart)
-	if err != nil {
-		return 1
-	}
-
-	var output io.WriteCloser
-	if *outputFilename == "-" {
-		output = nopCloser{stdout}
-	} else {
-		output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			return 1
-		}
-		defer output.Close()
-	}
-	bufw := bufio.NewWriter(output)
-
 	var bedout *os.File
 	var bedbufw *bufio.Writer
 	if *outputBed != "" {
@@ -230,15 +200,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		bedbufw = bufio.NewWriter(bedout)
 	}
 
-	err = cmd.export(bufw, bedout, input, strings.HasSuffix(*inputFilename, ".gz"), tilelib, refseq, cgs)
-	if err != nil {
-		return 1
-	}
-	err = bufw.Flush()
-	if err != nil {
-		return 1
-	}
-	err = output.Close()
+	err = cmd.export(*outputDir, bedout, tilelib, refseq, cgs)
 	if err != nil {
 		return 1
 	}
@@ -252,58 +214,22 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			return 1
 		}
 	}
-	err = in.Close()
-	if err != nil {
-		return 1
-	}
 	return 0
 }
 
-func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, tilelib *tileLibrary, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
-	need := map[tileLibRef]bool{}
+func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrary, refseq map[string][]tileLibRef, cgs []CompactGenome) error {
 	var seqnames []string
+	var missing []tileLibRef
 	for seqname, librefs := range refseq {
 		seqnames = append(seqnames, seqname)
 		for _, libref := range librefs {
-			if libref.Variant != 0 {
-				need[libref] = true
+			if libref.Variant != 0 && tilelib.TileVariantSequence(libref) == nil {
+				missing = append(missing, libref)
 			}
 		}
 	}
 	sort.Strings(seqnames)
 
-	for _, cg := range cgs {
-		for i, variant := range cg.Variants {
-			if variant == 0 {
-				continue
-			}
-			libref := tileLibRef{Tag: tagID(i / 2), Variant: variant}
-			need[libref] = true
-		}
-	}
-
-	log.Infof("export: loading %d tile variants", len(need))
-	tileVariant := map[tileLibRef]TileVariant{}
-	err := DecodeLibrary(librdr, gz, func(ent *LibraryEntry) error {
-		for _, tv := range ent.TileVariants {
-			libref := tilelib.getRef(tv.Tag, tv.Sequence)
-			if need[libref] {
-				tileVariant[libref] = tv
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	log.Infof("export: loaded %d tile variants", len(tileVariant))
-	var missing []tileLibRef
-	for libref := range need {
-		if _, ok := tileVariant[libref]; !ok {
-			missing = append(missing, libref)
-		}
-	}
 	if len(missing) > 0 {
 		if limit := 100; len(missing) > limit {
 			log.Warnf("first %d missing tiles: %v", limit, missing[:limit])
@@ -338,7 +264,26 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 			}()
 		}
 	}
-	merge(out, outw, "output")
+	if cmd.outputPerChrom {
+		for i, seqname := range seqnames {
+			f, err := os.OpenFile(filepath.Join(outdir, strings.Replace(cmd.outputFormat.Filename, ".", "."+seqname+".", 1)), os.O_CREATE|os.O_WRONLY, 0666)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			log.Infof("writing %q", f.Name())
+			outw[i] = f
+		}
+	} else {
+		fnm := filepath.Join(outdir, cmd.outputFormat.Filename)
+		log.Infof("writing %q", fnm)
+		out, err := os.OpenFile(fnm, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		merge(out, outw, "output")
+	}
 	if bedout != nil {
 		merge(bedout, bedw, "bed")
 	}
@@ -358,7 +303,7 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 			defer outw.Close()
 			outwb := bufio.NewWriter(outw)
 			defer outwb.Flush()
-			cmd.exportSeq(outwb, bedw, tilelib.taglib.keylen, seqname, refseq[seqname], tileVariant, cgs)
+			cmd.exportSeq(outwb, bedw, tilelib.taglib.keylen, seqname, refseq[seqname], tilelib, cgs)
 		}()
 	}
 
@@ -368,11 +313,11 @@ func (cmd *exporter) export(out, bedout io.Writer, librdr io.Reader, gz bool, ti
 
 // Align genome tiles to reference tiles, write diffs to outw, and (if
 // bedw is not nil) write tile coverage to bedw.
-func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string, reftiles []tileLibRef, tileVariant map[tileLibRef]TileVariant, cgs []CompactGenome) {
+func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string, reftiles []tileLibRef, tilelib *tileLibrary, cgs []CompactGenome) {
 	refpos := 0
 	variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 	for refstep, libref := range reftiles {
-		reftile := tileVariant[libref]
+		refseq := tilelib.TileVariantSequence(libref)
 		tagcoverage := 0 // number of times the start tag was found in genomes -- max is len(cgs)*2
 		for cgidx, cg := range cgs {
 			for phase := 0; phase < 2; phase++ {
@@ -387,30 +332,30 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 				if variant == libref.Variant {
 					continue
 				}
-				genometile := tileVariant[tileLibRef{Tag: libref.Tag, Variant: variant}]
-				if len(genometile.Sequence) == 0 {
+				genomeseq := tilelib.TileVariantSequence(tileLibRef{Tag: libref.Tag, Variant: variant})
+				if len(genomeseq) == 0 {
 					// Hash is known but sequence
 					// is not, e.g., retainNoCalls
 					// was false during import
 					continue
 				}
-				if len(genometile.Sequence) > cmd.maxTileSize {
+				if len(genomeseq) > cmd.maxTileSize {
 					continue
 				}
-				refSequence := reftile.Sequence
+				refSequence := refseq
 				// If needed, extend the reference
 				// sequence up to the tag at the end
-				// of the genometile sequence.
+				// of the genomeseq sequence.
 				refstepend := refstep + 1
-				for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genometile.Sequence[len(genometile.Sequence)-taglen:]) && len(refSequence) <= cmd.maxTileSize {
-					if &refSequence[0] == &reftile.Sequence[0] {
+				for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genomeseq[len(genomeseq)-taglen:]) && len(refSequence) <= cmd.maxTileSize {
+					if &refSequence[0] == &refseq[0] {
 						refSequence = append([]byte(nil), refSequence...)
 					}
-					refSequence = append(refSequence, tileVariant[reftiles[refstepend]].Sequence...)
+					refSequence = append(refSequence, tilelib.TileVariantSequence(reftiles[refstepend])...)
 					refstepend++
 				}
 				// (TODO: handle no-calls)
-				vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genometile.Sequence)), time.Second)
+				vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genomeseq)), time.Second)
 				for _, v := range vars {
 					if cmd.outputFormat.PadLeft {
 						v = v.PadLeft()
@@ -425,7 +370,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 				}
 			}
 		}
-		refpos += len(reftile.Sequence) - taglen
+		refpos += len(refseq) - taglen
 
 		// Flush entries from variantAt that are behind
 		// refpos. Flush all entries if this is the last
@@ -448,8 +393,8 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 			}
 			cmd.outputFormat.Print(outw, seqname, varslice)
 		}
-		if bedw != nil && len(reftile.Sequence) > 0 {
-			tilestart := refpos - len(reftile.Sequence) + taglen
+		if bedw != nil && len(refseq) > 0 {
+			tilestart := refpos - len(refseq) + taglen
 			tileend := refpos
 			if !lastrefstep {
 				tileend += taglen

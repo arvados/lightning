@@ -83,14 +83,15 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Check(statsout.Len() > 0, check.Equals, true)
 	c.Logf("%s", statsout.String())
 
-	c.Check(ioutil.WriteFile(tmpdir+"/merged.gob", merged.Bytes(), 0666), check.IsNil)
+	err := os.Mkdir(tmpdir+"/merged", 0777)
+	c.Assert(err, check.IsNil)
+	c.Check(ioutil.WriteFile(tmpdir+"/merged/library.gob", merged.Bytes(), 0666), check.IsNil)
 
-	hgvsout := &bytes.Buffer{}
-	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "hgvs", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), hgvsout, os.Stderr)
+	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "hgvs", "-input-dir", tmpdir + "/merged", "-output-dir", tmpdir, "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
 	c.Check(code, check.Equals, 0)
-	c.Check(hgvsout.Len() > 0, check.Equals, true)
-	c.Logf("%s", hgvsout.String())
-	c.Check(sortLines(hgvsout.String()), check.Equals, sortLines(`chr1:g.1_3delinsGGC	.
+	hgvsout, err := ioutil.ReadFile(tmpdir + "/out.csv")
+	c.Check(err, check.IsNil)
+	c.Check(sortLines(string(hgvsout)), check.Equals, sortLines(`chr1:g.1_3delinsGGC	.
 chr1:g.[41_42delinsAA];[41=]	.
 chr1:g.[161=];[161A>T]	.
 chr1:g.[178=];[178A>T]	.
@@ -105,12 +106,11 @@ chr2:g.[470_472del];[470=]	.
 chr2:g.[471=];[471_472delinsAA]	.
 `))
 
-	vcfout := &bytes.Buffer{}
-	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "vcf", "-i", tmpdir + "/merged.gob", "-output-bed", tmpdir + "/export.bed"}, bytes.NewReader(nil), vcfout, os.Stderr)
+	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-dir", tmpdir, "-output-format", "vcf", "-input-dir", tmpdir + "/merged", "-output-bed", tmpdir + "/export.bed", "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
 	c.Check(code, check.Equals, 0)
-	c.Check(vcfout.Len() > 0, check.Equals, true)
-	c.Logf("%s", vcfout.String())
-	c.Check(sortLines(vcfout.String()), check.Equals, sortLines(`chr1	1	NNN	GGC	1/1	0/0
+	vcfout, err := ioutil.ReadFile(tmpdir + "/out.vcf")
+	c.Check(err, check.IsNil)
+	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`chr1	1	NNN	GGC	1/1	0/0
 chr1	41	TT	AA	1/0	0/0
 chr1	161	A	T	0/1	0/0
 chr1	178	A	T	0/1	0/0
@@ -138,7 +138,7 @@ chr2 472 572 7 1000 . 496 572
 `))
 
 	annotateout := &bytes.Buffer{}
-	code = (&annotatecmd{}).RunCommand("lightning annotate", []string{"-local", "-variant-hash=true", "-i", tmpdir + "/merged.gob"}, bytes.NewReader(nil), annotateout, os.Stderr)
+	code = (&annotatecmd{}).RunCommand("lightning annotate", []string{"-local", "-variant-hash=true", "-i", tmpdir + "/merged/library.gob"}, bytes.NewReader(nil), annotateout, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	c.Check(annotateout.Len() > 0, check.Equals, true)
 	sorted := sortLines(annotateout.String())
