@@ -174,8 +174,9 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 }
 
 func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, variantmap map[tileLibRef]tileVariantID) error {
-	log.Debugf("loadCompactSequences: %d", len(cseqs))
+	log.Infof("loadCompactSequences: %d todo", len(cseqs))
 	for _, cseq := range cseqs {
+		log.Infof("loadCompactSequences: checking %s", cseq.Name)
 		for _, tseq := range cseq.TileSequences {
 			for i, libref := range tseq {
 				if libref.Variant == 0 {
@@ -198,6 +199,7 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 				return err
 			}
 		}
+		log.Infof("loadCompactSequences: checking %s done", cseq.Name)
 	}
 	tilelib.mtx.Lock()
 	defer tilelib.mtx.Unlock()
@@ -207,6 +209,7 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	for _, cseq := range cseqs {
 		tilelib.refseqs[cseq.Name] = cseq.TileSequences
 	}
+	log.Info("loadCompactSequences: done")
 	return nil
 }
 
@@ -331,7 +334,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 }
 
 func (tilelib *tileLibrary) WriteDir(dir string) error {
-	nfiles := 128
+	nfiles := 128 + len(tilelib.refseqs)
 	files := make([]*os.File, nfiles)
 	for i := range files {
 		f, err := os.OpenFile(fmt.Sprintf("%s/library.%04d.gob.gz", dir, i), os.O_CREATE|os.O_WRONLY, 0666)
@@ -361,6 +364,12 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 	}
 	sort.Strings(cgnames)
 
+	refnames := make([]string, 0, len(tilelib.refseqs))
+	for name := range tilelib.refseqs {
+		refnames = append(refnames, name)
+	}
+	sort.Strings(refnames)
+
 	log.Infof("WriteDir: writing %d files", nfiles)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -368,24 +377,20 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 	for start := range files {
 		start := start
 		go func() {
+			if refidx := start - (nfiles - len(tilelib.refseqs)); refidx >= 0 {
+				// write each ref to its own file
+				// (they seem to load very slowly)
+				name := refnames[refidx]
+				errs <- encoders[start].Encode(LibraryEntry{CompactSequences: []CompactSequence{{
+					Name:          name,
+					TileSequences: tilelib.refseqs[name],
+				}}})
+				return
+			}
 			err := encoders[start].Encode(LibraryEntry{TagSet: tilelib.taglib.Tags()})
 			if err != nil {
 				errs <- err
 				return
-			}
-			if start == 0 {
-				// For now, just write all the refs to
-				// the first file
-				for name, tseqs := range tilelib.refseqs {
-					err := encoders[start].Encode(LibraryEntry{CompactSequences: []CompactSequence{{
-						Name:          name,
-						TileSequences: tseqs,
-					}}})
-					if err != nil {
-						errs <- err
-						return
-					}
-				}
 			}
 			for i := start; i < len(cgnames); i += nfiles {
 				err := encoders[start].Encode(LibraryEntry{CompactGenomes: []CompactGenome{{
