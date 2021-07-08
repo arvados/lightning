@@ -108,6 +108,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			RAM:         700000000000,
 			VCPUs:       64,
 			Priority:    *priority,
+			APIAccess:   true,
 		}
 		err = runner.TranslatePaths(inputDir)
 		if err != nil {
