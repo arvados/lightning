@@ -190,15 +190,17 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		}
 	}
 
-	var bedout *os.File
+	var bedout io.Writer
+	var bedfile *os.File
 	var bedbufw *bufio.Writer
 	if *outputBed != "" {
-		bedout, err = os.OpenFile(*outputBed, os.O_CREATE|os.O_WRONLY, 0666)
+		bedfile, err = os.OpenFile(*outputBed, os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			return 1
 		}
-		defer bedout.Close()
-		bedbufw = bufio.NewWriter(bedout)
+		defer bedfile.Close()
+		bedbufw = bufio.NewWriterSize(bedfile, 16*1024*1024)
+		bedout = bedbufw
 	}
 
 	err = cmd.export(*outputDir, bedout, tilelib, refseq, cgs)
@@ -210,7 +212,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		if err != nil {
 			return 1
 		}
-		err = bedout.Close()
+		err = bedfile.Close()
 		if err != nil {
 			return 1
 		}
