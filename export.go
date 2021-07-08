@@ -106,7 +106,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         700000000000,
-			VCPUs:       64,
+			VCPUs:       96,
 			Priority:    *priority,
 			APIAccess:   true,
 		}
