@@ -138,7 +138,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		if err != nil {
 			return 1
 		}
-		fmt.Fprintln(stdout, output+"/export.csv")
+		fmt.Fprintln(stdout, output)
 		return 0
 	}
 
@@ -304,13 +304,14 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 				defer bedw.Close()
 			}
 			defer outw.Close()
-			outwb := bufio.NewWriter(outw)
+			outwb := bufio.NewWriterSize(outw, 8*1024*1024)
 			defer outwb.Flush()
 			cmd.exportSeq(outwb, bedw, tilelib.taglib.keylen, seqname, refseq[seqname], tilelib, cgs)
 		}()
 	}
 
 	merges.Wait()
+	throttle.Wait()
 	return nil
 }
 
