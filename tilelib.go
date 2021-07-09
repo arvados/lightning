@@ -377,6 +377,11 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 	for start := range files {
 		start := start
 		go func() {
+			err := encoders[start].Encode(LibraryEntry{TagSet: tilelib.taglib.Tags()})
+			if err != nil {
+				errs <- err
+				return
+			}
 			if refidx := start - (nfiles - len(tilelib.refseqs)); refidx >= 0 {
 				// write each ref to its own file
 				// (they seem to load very slowly)
@@ -385,11 +390,6 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 					Name:          name,
 					TileSequences: tilelib.refseqs[name],
 				}}})
-				return
-			}
-			err := encoders[start].Encode(LibraryEntry{TagSet: tilelib.taglib.Tags()})
-			if err != nil {
-				errs <- err
 				return
 			}
 			for i := start; i < len(cgnames); i += nfiles {
