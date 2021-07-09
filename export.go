@@ -318,11 +318,26 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 // Align genome tiles to reference tiles, write diffs to outw, and (if
 // bedw is not nil) write tile coverage to bedw.
 func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string, reftiles []tileLibRef, tilelib *tileLibrary, cgs []CompactGenome) {
+	t0 := time.Now()
+	progressbar := time.NewTicker(time.Minute)
+	defer progressbar.Stop()
 	var outmtx sync.Mutex
 	defer outmtx.Lock()
 	refpos := 0
 	variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 	for refstep, libref := range reftiles {
+		select {
+		case <-progressbar.C:
+			var eta interface{}
+			if refstep > 0 {
+				fin := t0.Add(time.Now().Sub(t0) * time.Duration(len(reftiles)) / time.Duration(refstep))
+				eta = fmt.Sprintf("%v (%v)", fin.Format(time.RFC3339), fin.Sub(time.Now()))
+			} else {
+				eta = "N/A"
+			}
+			log.Printf("exportSeq: %s: refstep %d of %d, %.0f/s, ETA %v", seqname, refstep, len(reftiles), float64(refstep)/time.Now().Sub(t0).Seconds(), eta)
+		default:
+		}
 		refseq := tilelib.TileVariantSequence(libref)
 		tagcoverage := 0 // number of times the start tag was found in genomes -- max is len(cgs)*2
 		for cgidx, cg := range cgs {
