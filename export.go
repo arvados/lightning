@@ -318,6 +318,8 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 // Align genome tiles to reference tiles, write diffs to outw, and (if
 // bedw is not nil) write tile coverage to bedw.
 func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string, reftiles []tileLibRef, tilelib *tileLibrary, cgs []CompactGenome) {
+	var outmtx sync.Mutex
+	defer outmtx.Lock()
 	refpos := 0
 	variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
 	for refstep, libref := range reftiles {
@@ -379,7 +381,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 		// Flush entries from variantAt that are behind
 		// refpos. Flush all entries if this is the last
 		// reftile of the path/chromosome.
-		var flushpos []int
+		flushpos := make([]int, 0, len(variantAt))
 		lastrefstep := refstep == len(reftiles)-1
 		for pos := range variantAt {
 			if lastrefstep || pos <= refpos {
@@ -387,7 +389,8 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 			}
 		}
 		sort.Slice(flushpos, func(i, j int) bool { return flushpos[i] < flushpos[j] })
-		for _, pos := range flushpos {
+		flushvariants := make([][]hgvs.Variant, len(flushpos))
+		for i, pos := range flushpos {
 			varslice := variantAt[pos]
 			delete(variantAt, pos)
 			for i := range varslice {
@@ -395,8 +398,15 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					varslice[i].Position = pos
 				}
 			}
-			cmd.outputFormat.Print(outw, seqname, varslice)
+			flushvariants[i] = varslice
 		}
+		outmtx.Lock()
+		go func() {
+			defer outmtx.Unlock()
+			for _, varslice := range flushvariants {
+				cmd.outputFormat.Print(outw, seqname, varslice)
+			}
+		}()
 		if bedw != nil && len(refseq) > 0 {
 			tilestart := refpos - len(refseq) + taglen
 			tileend := refpos
