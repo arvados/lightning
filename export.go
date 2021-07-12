@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,10 +34,12 @@ var (
 	outputFormats = map[string]outputFormat{
 		"hgvs-onehot": outputFormatHGVSOneHot,
 		"hgvs":        outputFormatHGVS,
+		"pvcf":        outputFormatPVCF,
 		"vcf":         outputFormatVCF,
 	}
 	outputFormatHGVS       = outputFormat{Filename: "out.csv", Print: printHGVS}
 	outputFormatHGVSOneHot = outputFormat{Filename: "out.csv", Print: printHGVSOneHot}
+	outputFormatPVCF       = outputFormat{Filename: "out.vcf", Print: printPVCF, PadLeft: true}
 	outputFormatVCF        = outputFormat{Filename: "out.vcf", Print: printVCF, PadLeft: true}
 )
 
@@ -63,7 +66,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	refname := flags.String("ref", "", "reference genome `name`")
 	inputDir := flags.String("input-dir", ".", "input `directory`")
 	outputDir := flags.String("output-dir", ".", "output `directory`")
-	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs or vcf")
+	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs, pvcf, or vcf")
 	outputBed := flags.String("output-bed", "", "also output bed `file`")
 	flags.BoolVar(&cmd.outputPerChrom, "output-per-chromosome", true, "output one file per chromosome")
 	labelsFilename := flags.String("output-labels", "", "also output genome labels csv `file`")
@@ -330,7 +333,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 		case <-progressbar.C:
 			var eta interface{}
 			if refstep > 0 {
-				fin := t0.Add(time.Now().Sub(t0) * time.Duration(len(reftiles)) / time.Duration(refstep))
+				fin := t0.Add(time.Duration(float64(time.Now().Sub(t0)) * float64(len(reftiles)) / float64(refstep)))
 				eta = fmt.Sprintf("%v (%v)", fin.Format(time.RFC3339), fin.Sub(time.Now()))
 			} else {
 				eta = "N/A"
@@ -449,21 +452,44 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 	}
 }
 
-func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
-	refs := map[string]map[string]int{}
+func bucketVarsliceByRef(varslice []hgvs.Variant) map[string]map[string]int {
+	byref := map[string]map[string]int{}
 	for _, v := range varslice {
 		if v.Ref == "" && v.New == "" {
 			continue
 		}
-		alts := refs[v.Ref]
+		alts := byref[v.Ref]
 		if alts == nil {
 			alts = map[string]int{}
-			refs[v.Ref] = alts
+			byref[v.Ref] = alts
 		}
-		alts[v.New] = 0
+		alts[v.New]++
 	}
-	for ref, alts := range refs {
-		var altslice []string
+	return byref
+}
+
+func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
+	for ref, alts := range bucketVarsliceByRef(varslice) {
+		altslice := make([]string, 0, len(alts))
+		for alt := range alts {
+			altslice = append(altslice, alt)
+		}
+		sort.Strings(altslice)
+
+		info := "AC="
+		for i, a := range altslice {
+			if i > 0 {
+				info += ","
+			}
+			info += strconv.Itoa(alts[a])
+		}
+		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t.\t.\t%s\tGT\t0/1\n", seqname, varslice[0].Position, ref, strings.Join(altslice, ","), info)
+	}
+}
+
+func printPVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
+	for ref, alts := range bucketVarsliceByRef(varslice) {
+		altslice := make([]string, 0, len(alts))
 		for alt := range alts {
 			altslice = append(altslice, alt)
 		}
@@ -471,11 +497,14 @@ func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 		for i, a := range altslice {
 			alts[a] = i + 1
 		}
-		fmt.Fprintf(out, "%s\t%d\t%s\t%s", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
+		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t.\t.\tGT", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
 		for i := 0; i < len(varslice); i += 2 {
 			v1, v2 := varslice[i], varslice[i+1]
 			a1, a2 := alts[v1.New], alts[v2.New]
 			if v1.Ref != ref {
+				// variant on allele 0 belongs on a
+				// different output line -- same
+				// chr,pos but different "ref" length
 				a1 = 0
 			}
 			if v2.Ref != ref {

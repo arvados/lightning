@@ -61,6 +61,36 @@ chr2.471_472delinsAA	1	0
 		"-local=true",
 		"-input-dir=" + tmpdir,
 		"-output-dir=" + tmpdir,
+		"-output-format=pvcf",
+		"-ref=testdata/ref.fasta",
+	}, &buffer, os.Stderr, os.Stderr)
+	c.Check(exited, check.Equals, 0)
+	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
+	c.Check(err, check.IsNil)
+	c.Log(string(output))
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	GT	1/1	0/0
+chr1	41	TT	AA	.	.	GT	1/0	0/0
+chr1	161	A	T	.	.	GT	0/1	0/0
+chr1	178	A	T	.	.	GT	0/1	0/0
+chr1	221	TCCA	T	.	.	GT	1/1	0/0
+chr1	302	TTTT	AAAA	.	.	GT	0/1	0/0
+`))
+	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.vcf")
+	c.Check(err, check.IsNil)
+	c.Log(string(output))
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2	1	TTT	AAA	.	.	GT	0/0	0/1
+chr2	125	CTT	AAA	.	.	GT	0/0	1/1
+chr2	240	ATTTTTCTTGCTCTC	A	.	.	GT	1/0	0/0
+chr2	258	CCTTGTATTTTT	AA	.	.	GT	1/0	0/0
+chr2	315	C	A	.	.	GT	1/0	0/0
+chr2	469	GTGG	G	.	.	GT	1/0	0/0
+chr2	471	GG	AA	.	.	GT	0/1	0/0
+`))
+
+	exited = (&exporter{}).RunCommand("export", []string{
+		"-local=true",
+		"-input-dir=" + tmpdir,
+		"-output-dir=" + tmpdir,
 		"-output-format=vcf",
 		"-ref=testdata/ref.fasta",
 	}, &buffer, os.Stderr, os.Stderr)
@@ -68,22 +98,22 @@ chr2.471_472delinsAA	1	0
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1	1	NNN	GGC	1/1	0/0
-chr1	41	TT	AA	1/0	0/0
-chr1	161	A	T	0/1	0/0
-chr1	178	A	T	0/1	0/0
-chr1	221	TCCA	T	1/1	0/0
-chr1	302	TTTT	AAAA	0/1	0/0
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	AC=2	GT	0/1
+chr1	41	TT	AA	.	.	AC=1	GT	0/1
+chr1	161	A	T	.	.	AC=1	GT	0/1
+chr1	178	A	T	.	.	AC=1	GT	0/1
+chr1	221	TCCA	T	.	.	AC=2	GT	0/1
+chr1	302	TTTT	AAAA	.	.	AC=1	GT	0/1
 `))
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2	1	TTT	AAA	0/0	0/1
-chr2	125	CTT	AAA	0/0	1/1
-chr2	240	ATTTTTCTTGCTCTC	A	1/0	0/0
-chr2	258	CCTTGTATTTTT	AA	1/0	0/0
-chr2	315	C	A	1/0	0/0
-chr2	469	GTGG	G	1/0	0/0
-chr2	471	GG	AA	0/1	0/0
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2	1	TTT	AAA	.	.	AC=1	GT	0/1
+chr2	125	CTT	AAA	.	.	AC=2	GT	0/1
+chr2	240	ATTTTTCTTGCTCTC	A	.	.	AC=1	GT	0/1
+chr2	258	CCTTGTATTTTT	AA	.	.	AC=1	GT	0/1
+chr2	315	C	A	.	.	AC=1	GT	0/1
+chr2	469	GTGG	G	.	.	AC=1	GT	0/1
+chr2	471	GG	AA	.	.	AC=1	GT	0/1
 `))
 }

@@ -106,23 +106,23 @@ chr2:g.[470_472del];[470=]	.
 chr2:g.[471=];[471_472delinsAA]	.
 `))
 
-	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-dir", tmpdir, "-output-format", "vcf", "-input-dir", tmpdir + "/merged", "-output-bed", tmpdir + "/export.bed", "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
+	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-dir", tmpdir, "-output-format", "pvcf", "-input-dir", tmpdir + "/merged", "-output-bed", tmpdir + "/export.bed", "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
 	c.Check(code, check.Equals, 0)
 	vcfout, err := ioutil.ReadFile(tmpdir + "/out.vcf")
 	c.Check(err, check.IsNil)
-	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`chr1	1	NNN	GGC	1/1	0/0
-chr1	41	TT	AA	1/0	0/0
-chr1	161	A	T	0/1	0/0
-chr1	178	A	T	0/1	0/0
-chr1	221	TCCA	T	1/1	0/0
-chr1	302	TTTT	AAAA	0/1	0/0
-chr2	1	TTT	AAA	0/0	0/1
-chr2	125	CTT	AAA	0/0	1/1
-chr2	240	ATTTTTCTTGCTCTC	A	1/0	0/0
-chr2	258	CCTTGTATTTTT	AA	1/0	0/0
-chr2	315	C	A	1/0	0/0
-chr2	469	GTGG	G	1/0	0/0
-chr2	471	GG	AA	0/1	0/0
+	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	GT	1/1	0/0
+chr1	41	TT	AA	.	.	GT	1/0	0/0
+chr1	161	A	T	.	.	GT	0/1	0/0
+chr1	178	A	T	.	.	GT	0/1	0/0
+chr1	221	TCCA	T	.	.	GT	1/1	0/0
+chr1	302	TTTT	AAAA	.	.	GT	0/1	0/0
+chr2	1	TTT	AAA	.	.	GT	0/0	0/1
+chr2	125	CTT	AAA	.	.	GT	0/0	1/1
+chr2	240	ATTTTTCTTGCTCTC	A	.	.	GT	1/0	0/0
+chr2	258	CCTTGTATTTTT	AA	.	.	GT	1/0	0/0
+chr2	315	C	A	.	.	GT	1/0	0/0
+chr2	469	GTGG	G	.	.	GT	1/0	0/0
+chr2	471	GG	AA	.	.	GT	0/1	0/0
 `))
 	bedout, err := ioutil.ReadFile(tmpdir + "/export.bed")
 	c.Check(err, check.IsNil)
