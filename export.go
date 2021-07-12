@@ -341,6 +341,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 			log.Printf("exportSeq: %s: refstep %d of %d, %.0f/s, ETA %v", seqname, refstep, len(reftiles), float64(refstep)/time.Now().Sub(t0).Seconds(), eta)
 		default:
 		}
+		diffs := map[tileLibRef][]hgvs.Variant{}
 		refseq := tilelib.TileVariantSequence(libref)
 		tagcoverage := 0 // number of times the start tag was found in genomes -- max is len(cgs)*2
 		for cgidx, cg := range cgs {
@@ -356,30 +357,38 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 				if variant == libref.Variant {
 					continue
 				}
-				genomeseq := tilelib.TileVariantSequence(tileLibRef{Tag: libref.Tag, Variant: variant})
-				if len(genomeseq) == 0 {
-					// Hash is known but sequence
-					// is not, e.g., retainNoCalls
-					// was false during import
-					continue
-				}
-				if len(genomeseq) > cmd.maxTileSize {
-					continue
-				}
-				refSequence := refseq
-				// If needed, extend the reference
-				// sequence up to the tag at the end
-				// of the genomeseq sequence.
-				refstepend := refstep + 1
-				for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genomeseq[len(genomeseq)-taglen:]) && len(refSequence) <= cmd.maxTileSize {
-					if &refSequence[0] == &refseq[0] {
-						refSequence = append([]byte(nil), refSequence...)
+				glibref := tileLibRef{Tag: libref.Tag, Variant: variant}
+				vars, ok := diffs[glibref]
+				if !ok {
+					genomeseq := tilelib.TileVariantSequence(glibref)
+					if len(genomeseq) == 0 {
+						// Hash is known but sequence
+						// is not, e.g., retainNoCalls
+						// was false during import
+						continue
 					}
-					refSequence = append(refSequence, tilelib.TileVariantSequence(reftiles[refstepend])...)
-					refstepend++
+					if len(genomeseq) > cmd.maxTileSize {
+						continue
+					}
+					refSequence := refseq
+					// If needed, extend the
+					// reference sequence up to
+					// the tag at the end of the
+					// genomeseq sequence.
+					refstepend := refstep + 1
+					for refstepend < len(reftiles) && len(refSequence) >= taglen && !bytes.EqualFold(refSequence[len(refSequence)-taglen:], genomeseq[len(genomeseq)-taglen:]) && len(refSequence) <= cmd.maxTileSize {
+						if &refSequence[0] == &refseq[0] {
+							refSequence = append([]byte(nil), refSequence...)
+						}
+						refSequence = append(refSequence, tilelib.TileVariantSequence(reftiles[refstepend])...)
+						refstepend++
+					}
+					// (TODO: handle no-calls)
+					refstr := strings.ToUpper(string(refSequence))
+					genomestr := strings.ToUpper(string(genomeseq))
+					vars, _ = hgvs.Diff(refstr, genomestr, time.Second)
+					diffs[glibref] = vars
 				}
-				// (TODO: handle no-calls)
-				vars, _ := hgvs.Diff(strings.ToUpper(string(refSequence)), strings.ToUpper(string(genomeseq)), time.Second)
 				for _, v := range vars {
 					if cmd.outputFormat.PadLeft {
 						v = v.PadLeft()
