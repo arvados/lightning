@@ -26,6 +26,7 @@ import (
 
 type outputFormat struct {
 	Filename string
+	Head     func(out io.Writer, cgs []CompactGenome)
 	Print    func(out io.Writer, seqname string, varslice []hgvs.Variant)
 	PadLeft  bool
 }
@@ -37,10 +38,11 @@ var (
 		"pvcf":        outputFormatPVCF,
 		"vcf":         outputFormatVCF,
 	}
-	outputFormatHGVS       = outputFormat{Filename: "out.csv", Print: printHGVS}
-	outputFormatHGVSOneHot = outputFormat{Filename: "out.csv", Print: printHGVSOneHot}
-	outputFormatPVCF       = outputFormat{Filename: "out.vcf", Print: printPVCF, PadLeft: true}
-	outputFormatVCF        = outputFormat{Filename: "out.vcf", Print: printVCF, PadLeft: true}
+	outputFormatHGVS       = outputFormat{Filename: "out.csv", Head: headNone, Print: printHGVS}
+	outputFormatHGVSOneHot = outputFormat{Filename: "out.csv", Head: headNone, Print: printHGVSOneHot}
+	outputFormatPVCF       = outputFormat{Filename: "out.vcf", Head: headPVCF, Print: printPVCF, PadLeft: true}
+	outputFormatVCF        = outputFormat{Filename: "out.vcf", Head: headVCF, Print: printVCF, PadLeft: true}
+	headNone               = func(io.Writer, []CompactGenome) {}
 )
 
 type exporter struct {
@@ -272,22 +274,24 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 	}
 	if cmd.outputPerChrom {
 		for i, seqname := range seqnames {
-			f, err := os.OpenFile(filepath.Join(outdir, strings.Replace(cmd.outputFormat.Filename, ".", "."+seqname+".", 1)), os.O_CREATE|os.O_WRONLY, 0666)
+			f, err := os.OpenFile(filepath.Join(outdir, strings.Replace(cmd.outputFormat.Filename, ".", "."+seqname+".", 1)), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				return err
 			}
 			defer f.Close()
 			log.Infof("writing %q", f.Name())
+			cmd.outputFormat.Head(f, cgs)
 			outw[i] = f
 		}
 	} else {
 		fnm := filepath.Join(outdir, cmd.outputFormat.Filename)
 		log.Infof("writing %q", fnm)
-		out, err := os.OpenFile(fnm, os.O_CREATE|os.O_WRONLY, 0666)
+		out, err := os.OpenFile(fnm, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 		if err != nil {
 			return err
 		}
 		defer out.Close()
+		cmd.outputFormat.Head(out, cgs)
 		merge(out, outw, "output")
 	}
 	if bedout != nil {
@@ -477,6 +481,10 @@ func bucketVarsliceByRef(varslice []hgvs.Variant) map[string]map[string]int {
 	return byref
 }
 
+func headVCF(out io.Writer, cgs []CompactGenome) {
+	fmt.Fprint(out, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+}
+
 func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 	for ref, alts := range bucketVarsliceByRef(varslice) {
 		altslice := make([]string, 0, len(alts))
@@ -492,8 +500,17 @@ func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 			}
 			info += strconv.Itoa(alts[a])
 		}
-		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t.\t.\t%s\tGT\t0/1\n", seqname, varslice[0].Position, ref, strings.Join(altslice, ","), info)
+		fmt.Fprintf(out, "%s\t%d\t.\t%s\t%s\t.\t.\t%s\n", seqname, varslice[0].Position, ref, strings.Join(altslice, ","), info)
 	}
+}
+
+func headPVCF(out io.Writer, cgs []CompactGenome) {
+	fmt.Fprintln(out, `##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">`)
+	fmt.Fprintf(out, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT")
+	for _, cg := range cgs {
+		fmt.Fprintf(out, "\t%s", cg.Name)
+	}
+	fmt.Fprintf(out, "\n")
 }
 
 func printPVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
@@ -506,7 +523,7 @@ func printPVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 		for i, a := range altslice {
 			alts[a] = i + 1
 		}
-		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t.\t.\tGT", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
+		fmt.Fprintf(out, "%s\t%d\t.\t%s\t%s\t.\t.\t.\tGT", seqname, varslice[0].Position, ref, strings.Join(altslice, ","))
 		for i := 0; i < len(varslice); i += 2 {
 			v1, v2 := varslice[i], varslice[i+1]
 			a1, a2 := alts[v1.New], alts[v2.New]

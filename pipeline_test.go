@@ -110,19 +110,21 @@ chr2:g.[471=];[471_472delinsAA]	.
 	c.Check(code, check.Equals, 0)
 	vcfout, err := ioutil.ReadFile(tmpdir + "/out.vcf")
 	c.Check(err, check.IsNil)
-	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	GT	1/1	0/0
-chr1	41	TT	AA	.	.	GT	1/0	0/0
-chr1	161	A	T	.	.	GT	0/1	0/0
-chr1	178	A	T	.	.	GT	0/1	0/0
-chr1	221	TCCA	T	.	.	GT	1/1	0/0
-chr1	302	TTTT	AAAA	.	.	GT	0/1	0/0
-chr2	1	TTT	AAA	.	.	GT	0/0	0/1
-chr2	125	CTT	AAA	.	.	GT	0/0	1/1
-chr2	240	ATTTTTCTTGCTCTC	A	.	.	GT	1/0	0/0
-chr2	258	CCTTGTATTTTT	AA	.	.	GT	1/0	0/0
-chr2	315	C	A	.	.	GT	1/0	0/0
-chr2	469	GTGG	G	.	.	GT	1/0	0/0
-chr2	471	GG	AA	.	.	GT	0/1	0/0
+	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	testdata/pipeline1/input1.1.fasta	testdata/pipeline1/input2.1.fasta
+chr1	1	.	NNN	GGC	.	.	.	GT	1/1	0/0
+chr1	41	.	TT	AA	.	.	.	GT	1/0	0/0
+chr1	161	.	A	T	.	.	.	GT	0/1	0/0
+chr1	178	.	A	T	.	.	.	GT	0/1	0/0
+chr1	221	.	TCCA	T	.	.	.	GT	1/1	0/0
+chr1	302	.	TTTT	AAAA	.	.	.	GT	0/1	0/0
+chr2	1	.	TTT	AAA	.	.	.	GT	0/0	0/1
+chr2	125	.	CTT	AAA	.	.	.	GT	0/0	1/1
+chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
+chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
+chr2	315	.	C	A	.	.	.	GT	1/0	0/0
+chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
+chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
 `))
 	bedout, err := ioutil.ReadFile(tmpdir + "/export.bed")
 	c.Check(err, check.IsNil)

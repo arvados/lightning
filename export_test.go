@@ -68,23 +68,27 @@ chr2.471_472delinsAA	1	0
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	GT	1/1	0/0
-chr1	41	TT	AA	.	.	GT	1/0	0/0
-chr1	161	A	T	.	.	GT	0/1	0/0
-chr1	178	A	T	.	.	GT	0/1	0/0
-chr1	221	TCCA	T	.	.	GT	1/1	0/0
-chr1	302	TTTT	AAAA	.	.	GT	0/1	0/0
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	testdata/pipeline1/input1.1.fasta	testdata/pipeline1/input2.1.fasta
+chr1	1	.	NNN	GGC	.	.	.	GT	1/1	0/0
+chr1	41	.	TT	AA	.	.	.	GT	1/0	0/0
+chr1	161	.	A	T	.	.	.	GT	0/1	0/0
+chr1	178	.	A	T	.	.	.	GT	0/1	0/0
+chr1	221	.	TCCA	T	.	.	.	GT	1/1	0/0
+chr1	302	.	TTTT	AAAA	.	.	.	GT	0/1	0/0
 `))
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2	1	TTT	AAA	.	.	GT	0/0	0/1
-chr2	125	CTT	AAA	.	.	GT	0/0	1/1
-chr2	240	ATTTTTCTTGCTCTC	A	.	.	GT	1/0	0/0
-chr2	258	CCTTGTATTTTT	AA	.	.	GT	1/0	0/0
-chr2	315	C	A	.	.	GT	1/0	0/0
-chr2	469	GTGG	G	.	.	GT	1/0	0/0
-chr2	471	GG	AA	.	.	GT	0/1	0/0
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	testdata/pipeline1/input1.1.fasta	testdata/pipeline1/input2.1.fasta
+chr2	1	.	TTT	AAA	.	.	.	GT	0/0	0/1
+chr2	125	.	CTT	AAA	.	.	.	GT	0/0	1/1
+chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
+chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
+chr2	315	.	C	A	.	.	.	GT	1/0	0/0
+chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
+chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
 `))
 
 	exited = (&exporter{}).RunCommand("export", []string{
@@ -98,22 +102,24 @@ chr2	471	GG	AA	.	.	GT	0/1	0/0
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1	1	NNN	GGC	.	.	AC=2	GT	0/1
-chr1	41	TT	AA	.	.	AC=1	GT	0/1
-chr1	161	A	T	.	.	AC=1	GT	0/1
-chr1	178	A	T	.	.	AC=1	GT	0/1
-chr1	221	TCCA	T	.	.	AC=2	GT	0/1
-chr1	302	TTTT	AAAA	.	.	AC=1	GT	0/1
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr1	1	.	NNN	GGC	.	.	AC=2
+chr1	41	.	TT	AA	.	.	AC=1
+chr1	161	.	A	T	.	.	AC=1
+chr1	178	.	A	T	.	.	AC=1
+chr1	221	.	TCCA	T	.	.	AC=2
+chr1	302	.	TTTT	AAAA	.	.	AC=1
 `))
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.vcf")
 	c.Check(err, check.IsNil)
 	c.Log(string(output))
-	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2	1	TTT	AAA	.	.	AC=1	GT	0/1
-chr2	125	CTT	AAA	.	.	AC=2	GT	0/1
-chr2	240	ATTTTTCTTGCTCTC	A	.	.	AC=1	GT	0/1
-chr2	258	CCTTGTATTTTT	AA	.	.	AC=1	GT	0/1
-chr2	315	C	A	.	.	AC=1	GT	0/1
-chr2	469	GTGG	G	.	.	AC=1	GT	0/1
-chr2	471	GG	AA	.	.	AC=1	GT	0/1
+	c.Check(sortLines(string(output)), check.Equals, sortLines(`#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr2	1	.	TTT	AAA	.	.	AC=1
+chr2	125	.	CTT	AAA	.	.	AC=2
+chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	AC=1
+chr2	258	.	CCTTGTATTTTT	AA	.	.	AC=1
+chr2	315	.	C	A	.	.	AC=1
+chr2	469	.	GTGG	G	.	.	AC=1
+chr2	471	.	GG	AA	.	.	AC=1
 `))
 }
