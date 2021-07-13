@@ -334,7 +334,8 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 }
 
 func (tilelib *tileLibrary) WriteDir(dir string) error {
-	nfiles := 128 + len(tilelib.refseqs)
+	ntilefiles := 128
+	nfiles := ntilefiles + len(tilelib.refseqs)
 	files := make([]*os.File, nfiles)
 	for i := range files {
 		f, err := os.OpenFile(fmt.Sprintf("%s/library.%04d.gob.gz", dir, i), os.O_CREATE|os.O_WRONLY, 0666)
@@ -382,7 +383,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 				errs <- err
 				return
 			}
-			if refidx := start - (nfiles - len(tilelib.refseqs)); refidx >= 0 {
+			if refidx := start - ntilefiles; refidx >= 0 {
 				// write each ref to its own file
 				// (they seem to load very slowly)
 				name := refnames[refidx]
@@ -392,7 +393,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 				}}})
 				return
 			}
-			for i := start; i < len(cgnames); i += nfiles {
+			for i := start; i < len(cgnames); i += ntilefiles {
 				err := encoders[start].Encode(LibraryEntry{CompactGenomes: []CompactGenome{{
 					Name:     cgnames[i],
 					Variants: tilelib.compactGenomes[cgnames[i]],
@@ -403,7 +404,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 				}
 			}
 			tvs := []TileVariant{}
-			for tag := start; tag < len(tilelib.variant) && ctx.Err() == nil; tag += nfiles {
+			for tag := start; tag < len(tilelib.variant) && ctx.Err() == nil; tag += ntilefiles {
 				tvs = tvs[:0]
 				for idx, hash := range tilelib.variant[tag] {
 					tvs = append(tvs, TileVariant{
