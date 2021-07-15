@@ -412,9 +412,11 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 						refstepend++
 					}
 					// (TODO: handle no-calls)
-					refstr := strings.ToUpper(string(refSequence))
-					genomestr := strings.ToUpper(string(genomeseq))
-					vars, _ = hgvs.Diff(refstr, genomestr, time.Second)
+					if len(refSequence) <= cmd.maxTileSize {
+						refstr := strings.ToUpper(string(refSequence))
+						genomestr := strings.ToUpper(string(genomeseq))
+						vars, _ = hgvs.Diff(refstr, genomestr, time.Second)
+					}
 					diffs[glibref] = vars
 				}
 				for _, v := range vars {
