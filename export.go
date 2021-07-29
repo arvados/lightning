@@ -25,10 +25,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type tvVariant struct {
+	hgvs.Variant
+	librefs map[tileLibRef]bool
+}
+
 type outputFormat struct {
 	Filename string
 	Head     func(out io.Writer, cgs []CompactGenome)
-	Print    func(out io.Writer, seqname string, varslice []hgvs.Variant)
+	Print    func(out io.Writer, seqname string, varslice []tvVariant)
 	PadLeft  bool
 }
 
@@ -355,7 +360,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 	var outmtx sync.Mutex
 	defer outmtx.Lock()
 	refpos := 0
-	variantAt := map[int][]hgvs.Variant{} // variantAt[chromOffset][genomeIndex*2+phase]
+	variantAt := map[int][]tvVariant{} // variantAt[chromOffset][genomeIndex*2+phase]
 	for refstep, libref := range reftiles {
 		select {
 		case <-progressbar.C:
@@ -426,10 +431,15 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 					v.Position += refpos
 					varslice := variantAt[v.Position]
 					if varslice == nil {
-						varslice = make([]hgvs.Variant, len(cgs)*2)
+						varslice = make([]tvVariant, len(cgs)*2)
 						variantAt[v.Position] = varslice
 					}
-					varslice[cgidx*2+phase] = v
+					varslice[cgidx*2+phase].Variant = v
+					if varslice[cgidx*2+phase].librefs == nil {
+						varslice[cgidx*2+phase].librefs = map[tileLibRef]bool{glibref: true}
+					} else {
+						varslice[cgidx*2+phase].librefs[glibref] = true
+					}
 				}
 			}
 		}
@@ -446,7 +456,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 			}
 		}
 		sort.Slice(flushpos, func(i, j int) bool { return flushpos[i] < flushpos[j] })
-		flushvariants := make([][]hgvs.Variant, len(flushpos))
+		flushvariants := make([][]tvVariant, len(flushpos))
 		for i, pos := range flushpos {
 			varslice := variantAt[pos]
 			delete(variantAt, pos)
@@ -491,7 +501,7 @@ func (cmd *exporter) exportSeq(outw, bedw io.Writer, taglen int, seqname string,
 	}
 }
 
-func bucketVarsliceByRef(varslice []hgvs.Variant) map[string]map[string]int {
+func bucketVarsliceByRef(varslice []tvVariant) map[string]map[string]int {
 	byref := map[string]map[string]int{}
 	for _, v := range varslice {
 		if v.Ref == "" && v.New == "" {
@@ -511,7 +521,7 @@ func headVCF(out io.Writer, cgs []CompactGenome) {
 	fmt.Fprint(out, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
 }
 
-func printVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
+func printVCF(out io.Writer, seqname string, varslice []tvVariant) {
 	for ref, alts := range bucketVarsliceByRef(varslice) {
 		altslice := make([]string, 0, len(alts))
 		for alt := range alts {
@@ -539,7 +549,7 @@ func headPVCF(out io.Writer, cgs []CompactGenome) {
 	fmt.Fprintf(out, "\n")
 }
 
-func printPVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
+func printPVCF(out io.Writer, seqname string, varslice []tvVariant) {
 	for ref, alts := range bucketVarsliceByRef(varslice) {
 		altslice := make([]string, 0, len(alts))
 		for alt := range alts {
@@ -568,13 +578,13 @@ func printPVCF(out io.Writer, seqname string, varslice []hgvs.Variant) {
 	}
 }
 
-func printHGVS(out io.Writer, seqname string, varslice []hgvs.Variant) {
+func printHGVS(out io.Writer, seqname string, varslice []tvVariant) {
 	for i := 0; i < len(varslice)/2; i++ {
 		if i > 0 {
 			out.Write([]byte{'\t'})
 		}
 		var1, var2 := varslice[i*2], varslice[i*2+1]
-		if var1 == var2 {
+		if var1.Variant == var2.Variant {
 			if var1.Ref == var1.New {
 				out.Write([]byte{'.'})
 			} else {
@@ -587,11 +597,11 @@ func printHGVS(out io.Writer, seqname string, varslice []hgvs.Variant) {
 	out.Write([]byte{'\n'})
 }
 
-func printHGVSOneHot(out io.Writer, seqname string, varslice []hgvs.Variant) {
+func printHGVSOneHot(out io.Writer, seqname string, varslice []tvVariant) {
 	vars := map[hgvs.Variant]bool{}
 	for _, v := range varslice {
 		if v.Ref != v.New {
-			vars[v] = true
+			vars[v.Variant] = true
 		}
 	}
 
@@ -605,7 +615,7 @@ func printHGVSOneHot(out io.Writer, seqname string, varslice []hgvs.Variant) {
 	for _, v := range sorted {
 		fmt.Fprintf(out, "%s.%s", seqname, v.String())
 		for i := 0; i < len(varslice); i += 2 {
-			if varslice[i] == v || varslice[i+1] == v {
+			if varslice[i].Variant == v || varslice[i+1].Variant == v {
 				out.Write([]byte("\t1"))
 			} else {
 				out.Write([]byte("\t0"))
