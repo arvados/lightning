@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"os"
+	"os/exec"
 
 	"gopkg.in/check.v1"
 )
@@ -32,8 +33,11 @@ func (s *exportSuite) TestFastaToHGVS(c *check.C) {
 		"-ref=testdata/ref.fasta",
 	}, &buffer, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
-	output, err := ioutil.ReadFile(tmpdir + "/out.chr1.csv")
-	c.Check(err, check.IsNil)
+	output, err := ioutil.ReadFile(tmpdir + "/out.chr1.tsv")
+	if !c.Check(err, check.IsNil) {
+		out, _ := exec.Command("find", tmpdir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+	}
 	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1.1_3delinsGGC	1	0
 chr1.41_42delinsAA	1	0
 chr1.161A>T	1	0
@@ -41,7 +45,7 @@ chr1.178A>T	1	0
 chr1.222_224del	1	0
 chr1.302_305delinsAAAA	1	0
 `))
-	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.csv")
+	output, err = ioutil.ReadFile(tmpdir + "/out.chr2.tsv")
 	c.Check(err, check.IsNil)
 	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr2.1_3delinsAAA	0	1
 chr2.125_127delinsAAA	0	1
@@ -53,8 +57,8 @@ chr2.471_472delinsAA	1	0
 `))
 	labels, err := ioutil.ReadFile(tmpdir + "/labels.csv")
 	c.Check(err, check.IsNil)
-	c.Check(string(labels), check.Equals, `0,"input1","out.csv"
-1,"input2","out.csv"
+	c.Check(string(labels), check.Equals, `0,"input1","out.tsv"
+1,"input2","out.tsv"
 `)
 
 	exited = (&exporter{}).RunCommand("export", []string{

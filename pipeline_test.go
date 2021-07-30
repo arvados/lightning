@@ -89,7 +89,7 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 
 	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-format", "hgvs", "-input-dir", tmpdir + "/merged", "-output-dir", tmpdir, "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
 	c.Check(code, check.Equals, 0)
-	hgvsout, err := ioutil.ReadFile(tmpdir + "/out.csv")
+	hgvsout, err := ioutil.ReadFile(tmpdir + "/out.tsv")
 	c.Check(err, check.IsNil)
 	c.Check(sortLines(string(hgvsout)), check.Equals, sortLines(`chr1:g.1_3delinsGGC	.
 chr1:g.[41_42delinsAA];[41=]	.

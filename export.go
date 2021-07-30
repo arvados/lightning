@@ -44,8 +44,8 @@ var (
 		"pvcf":        outputFormatPVCF,
 		"vcf":         outputFormatVCF,
 	}
-	outputFormatHGVS       = outputFormat{Filename: "out.csv", Head: headNone, Print: printHGVS}
-	outputFormatHGVSOneHot = outputFormat{Filename: "out.csv", Head: headNone, Print: printHGVSOneHot}
+	outputFormatHGVS       = outputFormat{Filename: "out.tsv", Head: headNone, Print: printHGVS}
+	outputFormatHGVSOneHot = outputFormat{Filename: "out.tsv", Head: headNone, Print: printHGVSOneHot}
 	outputFormatPVCF       = outputFormat{Filename: "out.vcf", Head: headPVCF, Print: printPVCF, PadLeft: true}
 	outputFormatVCF        = outputFormat{Filename: "out.vcf", Head: headVCF, Print: printVCF, PadLeft: true}
 	headNone               = func(io.Writer, []CompactGenome) {}
