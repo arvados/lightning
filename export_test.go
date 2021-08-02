@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/kshedden/gonpy"
 	"gopkg.in/check.v1"
 )
 
@@ -126,4 +127,61 @@ chr2	315	.	C	A	.	.	AC=1
 chr2	469	.	GTGG	G	.	.	AC=1
 chr2	471	.	GG	AA	.	.	AC=1
 `))
+
+	outdir := c.MkDir()
+	exited = (&exporter{}).RunCommand("export", []string{
+		"-local=true",
+		"-input-dir=" + tmpdir,
+		"-output-dir=" + outdir,
+		"-output-format=hgvs-numpy",
+		"-ref=testdata/ref.fasta",
+	}, &buffer, os.Stderr, os.Stderr)
+	c.Check(exited, check.Equals, 0)
+
+	f, err := os.Open(outdir + "/matrix.chr1.npy")
+	c.Assert(err, check.IsNil)
+	defer f.Close()
+	npy, err := gonpy.NewReader(f)
+	c.Assert(err, check.IsNil)
+	variants, err := npy.GetInt8()
+	c.Assert(err, check.IsNil)
+	c.Check(variants, check.HasLen, 6*2*2) // 6 variants * 2 alleles * 2 genomes
+	c.Check(variants, check.DeepEquals, []int8{
+		1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, // input1.1.fasta
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // input2.1.fasta
+	})
+
+	f, err = os.Open(outdir + "/matrix.chr2.npy")
+	c.Assert(err, check.IsNil)
+	defer f.Close()
+	npy, err = gonpy.NewReader(f)
+	c.Assert(err, check.IsNil)
+	variants, err = npy.GetInt8()
+	c.Assert(err, check.IsNil)
+	c.Check(variants, check.HasLen, 7*2*2) // 6 variants * 2 alleles * 2 genomes
+	c.Check(variants, check.DeepEquals, []int8{
+		0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, // input1.1.fasta
+		0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // input2.1.fasta
+	})
+
+	annotations, err := ioutil.ReadFile(outdir + "/annotations.chr1.csv")
+	c.Check(err, check.IsNil)
+	c.Logf("%s", string(annotations))
+	c.Check(string(annotations), check.Equals, `0,"chr1.1_3delinsGGC"
+1,"chr1.41_42delinsAA"
+2,"chr1.161A>T"
+3,"chr1.178A>T"
+4,"chr1.222_224del"
+5,"chr1.302_305delinsAAAA"
+`)
+	annotations, err = ioutil.ReadFile(outdir + "/annotations.chr2.csv")
+	c.Check(err, check.IsNil)
+	c.Check(string(annotations), check.Equals, `0,"chr2.1_3delinsAAA"
+1,"chr2.125_127delinsAAA"
+2,"chr2.241_254del"
+3,"chr2.258_269delinsAA"
+4,"chr2.315C>A"
+5,"chr2.470_472del"
+6,"chr2.471_472delinsAA"
+`)
 }
