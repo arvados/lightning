@@ -42,7 +42,7 @@ type outputFormat interface {
 
 var outputFormats = map[string]func() outputFormat{
 	"hgvs-numpy": func() outputFormat {
-		return &formatHGVSNumpy{alleles: map[string][][]bool{}, variants: map[string][]hgvs.Variant{}}
+		return &formatHGVSNumpy{alleles: map[string][][]bool{}}
 	},
 	"hgvs-onehot": func() outputFormat { return formatHGVSOneHot{} },
 	"hgvs":        func() outputFormat { return formatHGVS{} },
@@ -117,7 +117,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning export",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         700000000000,
+			RAM:         750000000000,
 			VCPUs:       96,
 			Priority:    *priority,
 			APIAccess:   true,
@@ -685,14 +685,13 @@ func (formatHGVSOneHot) Print(out io.Writer, seqname string, varslice []tvVarian
 
 type formatHGVSNumpy struct {
 	sync.Mutex
-	variants map[string][]hgvs.Variant // variants[seqname][variantidx]
-	alleles  map[string][][]bool       // alleles[seqname][variantidx][genomeidx*2+phase]
+	alleles map[string][][]bool // alleles[seqname][variantidx][genomeidx*2+phase]
 }
 
-func (*formatHGVSNumpy) Filename() string                              { return "matrix.npy" }
+func (*formatHGVSNumpy) Filename() string                              { return "annotations.csv" }
 func (*formatHGVSNumpy) PadLeft() bool                                 { return false }
 func (*formatHGVSNumpy) Head(out io.Writer, cgs []CompactGenome) error { return nil }
-func (f *formatHGVSNumpy) Print(_ io.Writer, seqname string, varslice []tvVariant) error {
+func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVariant) error {
 	// sort variants to ensure output is deterministic
 	sorted := make([]hgvs.Variant, 0, len(varslice))
 	for _, v := range varslice {
@@ -703,7 +702,6 @@ func (f *formatHGVSNumpy) Print(_ io.Writer, seqname string, varslice []tvVarian
 	f.Lock()
 	defer f.Unlock()
 
-	seqvariants := f.variants[seqname]
 	seqalleles := f.alleles[seqname]
 
 	// append a row to seqvariants and seqalleles for each unique
@@ -721,16 +719,17 @@ func (f *formatHGVSNumpy) Print(_ io.Writer, seqname string, varslice []tvVarian
 			}
 		}
 		seqalleles = append(seqalleles, newrow)
-		seqvariants = append(seqvariants, v)
+		_, err := fmt.Fprintf(outw, "%d,%q\n", len(seqalleles)-1, seqname+"."+v.String())
+		if err != nil {
+			return err
+		}
 	}
-	f.variants[seqname] = seqvariants
 	f.alleles[seqname] = seqalleles
 	return nil
 }
-func (f *formatHGVSNumpy) Finish(outdir string, outw io.Writer, seqname string) error {
+func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) error {
 	// Write seqname's data to a .npy matrix with one row per
 	// genome and 2 columns per variant.
-	seqvariants := f.variants[seqname]
 	seqalleles := f.alleles[seqname]
 	if len(seqalleles) == 0 {
 		return nil
@@ -752,7 +751,12 @@ func (f *formatHGVSNumpy) Finish(outdir string, outw io.Writer, seqname string) 
 			}
 		}
 	}
-	bufw := bufio.NewWriter(outw)
+	outf, err := os.OpenFile(outdir+"/matrix."+seqname+".npy", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer outf.Close()
+	bufw := bufio.NewWriter(outf)
 	npw, err := gonpy.NewWriter(nopCloser{bufw})
 	if err != nil {
 		return err
@@ -768,20 +772,9 @@ func (f *formatHGVSNumpy) Finish(outdir string, outw io.Writer, seqname string) 
 	if err != nil {
 		return err
 	}
-
-	// Write annotations
-	csv, err := os.OpenFile(outdir+"/annotations."+seqname+".csv", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0777)
+	err = outf.Close()
 	if err != nil {
 		return err
 	}
-	defer csv.Close()
-	for i, v := range seqvariants {
-		fmt.Fprintf(csv, "%d,%q\n", i, seqname+"."+v.String())
-	}
-	err = csv.Close()
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
