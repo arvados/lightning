@@ -700,9 +700,8 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 	sort.Slice(sorted, func(a, b int) bool { return hgvs.Less(sorted[a], sorted[b]) })
 
 	f.Lock()
-	defer f.Unlock()
-
 	seqalleles := f.alleles[seqname]
+	f.Unlock()
 
 	// append a row to seqvariants and seqalleles for each unique
 	// non-ref variant in varslice.
@@ -724,7 +723,10 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 			return err
 		}
 	}
+
+	f.Lock()
 	f.alleles[seqname] = seqalleles
+	f.Unlock()
 	return nil
 }
 func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) error {
