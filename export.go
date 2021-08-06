@@ -38,6 +38,7 @@ type outputFormat interface {
 	Head(out io.Writer, cgs []CompactGenome) error
 	Print(out io.Writer, seqname string, varslice []tvVariant) error
 	Finish(outdir string, out io.Writer, seqname string) error
+	MaxGoroutines() int
 }
 
 var outputFormats = map[string]func() outputFormat{
@@ -328,6 +329,9 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 	}
 
 	throttle := throttle{Max: runtime.NumCPU()}
+	if max := cmd.outputFormat.MaxGoroutines(); max > 0 {
+		throttle.Max = max
+	}
 	log.Infof("assembling %d sequences in %d goroutines", len(seqnames), throttle.Max)
 	for seqidx, seqname := range seqnames {
 		seqidx, seqname := seqidx, seqname
@@ -526,6 +530,7 @@ func bucketVarsliceByRef(varslice []tvVariant) map[string]map[string]int {
 
 type formatVCF struct{}
 
+func (formatVCF) MaxGoroutines() int                     { return 0 }
 func (formatVCF) Filename() string                       { return "out.vcf" }
 func (formatVCF) PadLeft() bool                          { return true }
 func (formatVCF) Finish(string, io.Writer, string) error { return nil }
@@ -558,6 +563,7 @@ func (formatVCF) Print(out io.Writer, seqname string, varslice []tvVariant) erro
 
 type formatPVCF struct{}
 
+func (formatPVCF) MaxGoroutines() int                     { return 0 }
 func (formatPVCF) Filename() string                       { return "out.vcf" }
 func (formatPVCF) PadLeft() bool                          { return true }
 func (formatPVCF) Finish(string, io.Writer, string) error { return nil }
@@ -612,6 +618,7 @@ func (formatPVCF) Print(out io.Writer, seqname string, varslice []tvVariant) err
 
 type formatHGVS struct{}
 
+func (formatHGVS) MaxGoroutines() int                            { return 0 }
 func (formatHGVS) Filename() string                              { return "out.tsv" }
 func (formatHGVS) PadLeft() bool                                 { return false }
 func (formatHGVS) Head(out io.Writer, cgs []CompactGenome) error { return nil }
@@ -647,6 +654,7 @@ func (formatHGVS) Print(out io.Writer, seqname string, varslice []tvVariant) err
 
 type formatHGVSOneHot struct{}
 
+func (formatHGVSOneHot) MaxGoroutines() int                            { return 0 }
 func (formatHGVSOneHot) Filename() string                              { return "out.tsv" }
 func (formatHGVSOneHot) PadLeft() bool                                 { return false }
 func (formatHGVSOneHot) Head(out io.Writer, cgs []CompactGenome) error { return nil }
@@ -688,6 +696,7 @@ type formatHGVSNumpy struct {
 	alleles map[string][][]bool // alleles[seqname][variantidx][genomeidx*2+phase]
 }
 
+func (*formatHGVSNumpy) MaxGoroutines() int                            { return 8 }
 func (*formatHGVSNumpy) Filename() string                              { return "annotations.csv" }
 func (*formatHGVSNumpy) PadLeft() bool                                 { return false }
 func (*formatHGVSNumpy) Head(out io.Writer, cgs []CompactGenome) error { return nil }
@@ -733,6 +742,9 @@ func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) err
 	// Write seqname's data to a .npy matrix with one row per
 	// genome and 2 columns per variant.
 	seqalleles := f.alleles[seqname]
+	f.Lock()
+	delete(f.alleles, seqname)
+	f.Unlock()
 	if len(seqalleles) == 0 {
 		return nil
 	}
