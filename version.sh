@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
 set -e -o pipefail
 echo -n "0.0.0"
 echo -n "+$(git log -n1 --format=%h)"

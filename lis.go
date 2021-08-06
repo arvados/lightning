@@ -1,3 +1,7 @@
+// Copyright (C) The Lightning Authors. All rights reserved.
+//
+// SPDX-License-Identifier: AGPL-3.0
+
 package lightning
 
 func longestIncreasingSubsequence(srclen int, X func(int) int) []int {
