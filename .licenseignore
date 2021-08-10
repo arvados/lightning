@@ -1,0 +1,5 @@
+.licenseignore
+AUTHORS
+go.mod
+go.sum
+testdata/*
