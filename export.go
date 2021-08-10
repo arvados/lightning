@@ -60,6 +60,7 @@ type exporter struct {
 	outputPerChrom bool
 	compress       bool
 	maxTileSize    int
+	filter         filter
 }
 
 func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -85,6 +86,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags.BoolVar(&cmd.compress, "z", false, "write gzip-compressed output files")
 	labelsFilename := flags.String("output-labels", "", "also output genome labels csv `file`")
 	flags.IntVar(&cmd.maxTileSize, "max-tile-size", 50000, "don't try to make annotations for tiles bigger than given `size`")
+	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
 		err = nil
@@ -151,6 +153,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			"-output-dir", "/mnt/output",
 			"-z=" + fmt.Sprintf("%v", cmd.compress),
 		}
+		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
@@ -181,6 +184,9 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		}())
 		return 1
 	}
+
+	log.Infof("filtering: %+v", cmd.filter)
+	cmd.filter.Apply(tilelib)
 
 	names := cgnames(tilelib)
 	for _, name := range names {

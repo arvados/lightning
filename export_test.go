@@ -132,6 +132,7 @@ chr2	469	.	GTGG	G	.	.	AC=1
 chr2	471	.	GG	AA	.	.	AC=1
 `))
 
+	c.Logf("export hgvs-numpy")
 	outdir := c.MkDir()
 	exited = (&exporter{}).RunCommand("export", []string{
 		"-local=true",

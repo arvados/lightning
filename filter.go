@@ -65,9 +65,12 @@ func (f *filter) Apply(tilelib *tileLibrary) {
 	// f.MinCoverage.
 	mincov := int(2*f.MinCoverage*float64(len(tilelib.compactGenomes)) + 1)
 TAG:
-	for tag := 0; tag < len(tilelib.variant) && tag < f.MaxTag; tag++ {
+	for tag := 0; tag < len(tilelib.variant) && (tag < f.MaxTag || f.MaxTag < 0); tag++ {
 		tagcov := 0
 		for _, cg := range tilelib.compactGenomes {
+			if len(cg) < tag*2+2 {
+				continue
+			}
 			if cg[tag*2] > 0 {
 				tagcov++
 			}
@@ -79,8 +82,10 @@ TAG:
 			}
 		}
 		for _, cg := range tilelib.compactGenomes {
-			cg[tag*2] = 0
-			cg[tag*2+1] = 0
+			if len(cg) > tag*2 {
+				cg[tag*2] = 0
+				cg[tag*2+1] = 0
+			}
 		}
 	}
 

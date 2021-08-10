@@ -95,11 +95,9 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 			"-output-labels", "/mnt/output/labels.csv",
 			"-regions", *regionsFilename,
 			"-expand-regions", fmt.Sprintf("%d", *expandRegions),
-			"-max-variants", fmt.Sprintf("%d", cmd.filter.MaxVariants),
-			"-min-coverage", fmt.Sprintf("%f", cmd.filter.MinCoverage),
-			"-max-tag", fmt.Sprintf("%d", cmd.filter.MaxTag),
 			"-chunks", fmt.Sprintf("%d", *chunks),
 		}
+		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
 		output, err = runner.Run()
 		if err != nil {
