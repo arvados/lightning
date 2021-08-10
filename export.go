@@ -697,10 +697,11 @@ func (formatHGVSOneHot) Print(out io.Writer, seqname string, varslice []tvVarian
 
 type formatHGVSNumpy struct {
 	sync.Mutex
-	alleles map[string][][]bool // alleles[seqname][variantidx][genomeidx*2+phase]
+	writelock sync.Mutex
+	alleles   map[string][][]bool // alleles[seqname][variantidx][genomeidx*2+phase]
 }
 
-func (*formatHGVSNumpy) MaxGoroutines() int                            { return 8 }
+func (*formatHGVSNumpy) MaxGoroutines() int                            { return 4 }
 func (*formatHGVSNumpy) Filename() string                              { return "annotations.csv" }
 func (*formatHGVSNumpy) PadLeft() bool                                 { return false }
 func (*formatHGVSNumpy) Head(out io.Writer, cgs []CompactGenome) error { return nil }
@@ -785,7 +786,9 @@ func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) err
 		"cols":    cols,
 	}).Info("writing numpy")
 	npw.Shape = []int{rows, cols}
+	f.writelock.Lock() // serialize because WriteInt8 uses lots of memory
 	npw.WriteInt8(out)
+	f.writelock.Unlock()
 	err = bufw.Flush()
 	if err != nil {
 		return err
