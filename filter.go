@@ -15,6 +15,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"regexp"
 	"strings"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -25,12 +26,14 @@ type filter struct {
 	MaxVariants int
 	MinCoverage float64
 	MaxTag      int
+	MatchGenome string
 }
 
 func (f *filter) Flags(flags *flag.FlagSet) {
 	flags.IntVar(&f.MaxVariants, "max-variants", -1, "drop tiles with more than `N` variants")
 	flags.Float64Var(&f.MinCoverage, "min-coverage", 0, "drop tiles with coverage less than `P` across all haplotypes (0 < P ≤ 1)")
 	flags.IntVar(&f.MaxTag, "max-tag", -1, "drop tiles with tag ID > `N`")
+	flags.StringVar(&f.MatchGenome, "match-genome", "", "keep genomes whose names contain `regexp`, drop the rest")
 }
 
 func (f *filter) Args() []string {
@@ -38,6 +41,7 @@ func (f *filter) Args() []string {
 		fmt.Sprintf("-max-variants=%d", f.MaxVariants),
 		fmt.Sprintf("-min-coverage=%f", f.MinCoverage),
 		fmt.Sprintf("-max-tag=%d", f.MaxTag),
+		fmt.Sprintf("-match-genome=%s", f.MatchGenome),
 	}
 }
 
@@ -99,6 +103,16 @@ TAG:
 			if len(cg) > 2*f.MaxTag {
 				tilelib.compactGenomes[name] = cg[:2*f.MaxTag]
 			}
+		}
+	}
+
+	re, err := regexp.Compile(f.MatchGenome)
+	if err != nil {
+		log.Errorf("invalid regexp %q does not match anything, dropping all genomes", f.MatchGenome)
+	}
+	for name := range tilelib.compactGenomes {
+		if !re.MatchString(name) {
+			delete(tilelib.compactGenomes, name)
 		}
 	}
 }

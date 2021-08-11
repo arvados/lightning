@@ -164,6 +164,7 @@ chr2	471	.	GG	AA	.	.	AC=1
 		"-output-dir=" + outdir,
 		"-output-format=hgvs-numpy",
 		"-ref=testdata/ref.fasta",
+		"-match-genome=input[12]",
 	}, nil, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 
