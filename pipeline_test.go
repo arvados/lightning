@@ -95,11 +95,11 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	c.Check(code, check.Equals, 0)
 	hgvsout, err := ioutil.ReadFile(tmpdir + "/out.tsv")
 	c.Check(err, check.IsNil)
-	c.Check(sortLines(string(hgvsout)), check.Equals, sortLines(`chr1:g.1_3delinsGGC	.
-chr1:g.[41_42delinsAA];[41=]	.
-chr1:g.[161=];[161A>T]	.
-chr1:g.[178=];[178A>T]	.
-chr1:g.222_224del	.
+	c.Check(sortLines(string(hgvsout)), check.Equals, sortLines(`chr1:g.1_3delinsGGC	N
+chr1:g.[41_42delinsAA];[41=]	N
+chr1:g.[161=];[161A>T]	N
+chr1:g.[178=];[178A>T]	N
+chr1:g.222_224del	N
 chr1:g.[302=];[302_305delinsAAAA]	.
 .	chr2:g.[1=];[1_3delinsAAA]
 .	chr2:g.125_127delinsAAA

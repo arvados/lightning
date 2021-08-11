@@ -47,7 +47,7 @@ type outputFormat interface {
 
 var outputFormats = map[string]func() outputFormat{
 	"hgvs-numpy": func() outputFormat {
-		return &formatHGVSNumpy{alleles: map[string][][]bool{}}
+		return &formatHGVSNumpy{alleles: map[string][][]int8{}}
 	},
 	"hgvs-onehot": func() outputFormat { return formatHGVSOneHot{} },
 	"hgvs":        func() outputFormat { return formatHGVS{} },
@@ -400,15 +400,14 @@ func eachVariant(bedw io.Writer, taglen int, seqname string, reftiles []tileLibR
 		tagcoverage := 0 // number of times the start tag was found in genomes -- max is len(cgs)*2
 		for cgidx, cg := range cgs {
 			for phase := 0; phase < 2; phase++ {
-				if len(cg.Variants) <= int(libref.Tag)*2+phase {
-					continue
+				var variant tileVariantID
+				if i := int(libref.Tag)*2 + phase; len(cg.Variants) > i {
+					variant = cg.Variants[i]
 				}
-				variant := cg.Variants[int(libref.Tag)*2+phase]
-				if variant == 0 {
-					continue
+				if variant > 0 {
+					tagcoverage++
 				}
-				tagcoverage++
-				if variant == libref.Variant {
+				if variant == libref.Variant || variant == 0 {
 					continue
 				}
 				glibref := tileLibRef{Tag: libref.Tag, Variant: variant}
@@ -481,9 +480,23 @@ func eachVariant(bedw io.Writer, taglen int, seqname string, reftiles []tileLibR
 		for i, pos := range flushpos {
 			varslice := variantAt[pos]
 			delete(variantAt, pos)
+			// Check for uninitialized (zero-value)
+			// elements in varslice
 			for i := range varslice {
-				if varslice[i].Position == 0 {
-					varslice[i].Position = pos
+				if varslice[i].Position != 0 {
+					// Not a zero-value element
+					continue
+				}
+				// Set the position so
+				// varslice[*].Position are all equal
+				varslice[i].Position = pos
+				// This could be either =ref or a
+				// missing/low-quality tile. Figure
+				// out which.
+				v := cgs[i/2].Variants[int(libref.Tag)*2+i%2]
+				if v < 1 || len(tilelib.TileVariantSequence(tileLibRef{Tag: libref.Tag, Variant: v})) == 0 {
+					// Missing/low-quality tile.
+					varslice[i].New = "-" // fasta "gap of indeterminate length"
 				}
 			}
 			flushvariants[i] = varslice
@@ -526,6 +539,11 @@ func bucketVarsliceByRef(varslice []tvVariant) map[string]map[string]int {
 	byref := map[string]map[string]int{}
 	for _, v := range varslice {
 		if v.Ref == "" && v.New == "" {
+			// =ref
+			continue
+		}
+		if v.New == "-" {
+			// no-call
 			continue
 		}
 		alts := byref[v.Ref]
@@ -639,6 +657,13 @@ func (formatHGVS) Print(out io.Writer, seqname string, varslice []tvVariant) err
 			out.Write([]byte{'\t'})
 		}
 		var1, var2 := varslice[i*2], varslice[i*2+1]
+		if var1.New == "-" || var2.New == "-" {
+			_, err := out.Write([]byte{'N'})
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if var1.Variant == var2.Variant {
 			if var1.Ref == var1.New {
 				_, err := out.Write([]byte{'.'})
@@ -685,6 +710,9 @@ func (formatHGVSOneHot) Print(out io.Writer, seqname string, varslice []tvVarian
 	sort.Slice(sorted, func(a, b int) bool { return hgvs.Less(sorted[a], sorted[b]) })
 
 	for _, v := range sorted {
+		if v.New == "-" {
+			continue
+		}
 		fmt.Fprintf(out, "%s.%s", seqname, v.String())
 		for i := 0; i < len(varslice); i += 2 {
 			if varslice[i].Variant == v || varslice[i+1].Variant == v {
@@ -704,7 +732,7 @@ func (formatHGVSOneHot) Print(out io.Writer, seqname string, varslice []tvVarian
 type formatHGVSNumpy struct {
 	sync.Mutex
 	writelock sync.Mutex
-	alleles   map[string][][]bool // alleles[seqname][variantidx][genomeidx*2+phase]
+	alleles   map[string][][]int8 // alleles[seqname][variantidx][genomeidx*2+phase]
 }
 
 func (*formatHGVSNumpy) MaxGoroutines() int                            { return 4 }
@@ -723,18 +751,20 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 	seqalleles := f.alleles[seqname]
 	f.Unlock()
 
-	// append a row to seqvariants and seqalleles for each unique
-	// non-ref variant in varslice.
+	// append a row to seqalleles for each unique non-ref variant
+	// in varslice.
 	var previous hgvs.Variant
 	for _, v := range sorted {
-		if previous == v || v.Ref == v.New {
+		if previous == v || v.Ref == v.New || v.New == "-" {
 			continue
 		}
 		previous = v
-		newrow := make([]bool, len(varslice))
+		newrow := make([]int8, len(varslice))
 		for i, allele := range varslice {
 			if allele.Variant == v {
-				newrow[i] = true
+				newrow[i] = 1
+			} else if allele.Variant.New == "-" {
+				newrow[i] = -1
 			}
 		}
 		seqalleles = append(seqalleles, newrow)
@@ -752,8 +782,8 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) error {
 	// Write seqname's data to a .npy matrix with one row per
 	// genome and 2 columns per variant.
-	seqalleles := f.alleles[seqname]
 	f.Lock()
+	seqalleles := f.alleles[seqname]
 	delete(f.alleles, seqname)
 	f.Unlock()
 	if len(seqalleles) == 0 {
@@ -767,10 +797,14 @@ func (f *formatHGVSNumpy) Finish(outdir string, _ io.Writer, seqname string) err
 	for varidx, alleles := range seqalleles {
 		for g := 0; g < len(alleles)/2; g++ {
 			aa, ab := alleles[g*2], alleles[g*2+1]
-			if aa && ab {
+			if aa < 0 || ab < 0 {
+				// no-call
+				out[g*cols+varidx*2] = -1
+				out[g*cols+varidx*2+1] = -1
+			} else if aa > 0 && ab > 0 {
 				// hom
 				out[g*cols+varidx*2] = 1
-			} else if aa || ab {
+			} else if aa > 0 || ab > 0 {
 				// het
 				out[g*cols+varidx*2+1] = 1
 			}

@@ -5,7 +5,6 @@
 package lightning
 
 import (
-	"bytes"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -24,19 +23,44 @@ func (s *exportSuite) TestFastaToHGVS(c *check.C) {
 	err := ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
 	c.Check(err, check.IsNil)
 
-	var buffer bytes.Buffer
-	exited := (&importer{}).RunCommand("import", []string{"-local=true", "-tag-library", "testdata/tags", "-output-tiles", "-save-incomplete-tiles", "testdata/pipeline1", "testdata/ref.fasta"}, &bytes.Buffer{}, &buffer, os.Stderr)
+	exited := (&importer{}).RunCommand("import", []string{
+		"-local=true",
+		"-tag-library", "testdata/tags",
+		"-output-tiles",
+		"-save-incomplete-tiles",
+		"-o", tmpdir + "/library1.gob",
+		"testdata/ref.fasta",
+	}, nil, os.Stderr, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
-	ioutil.WriteFile(tmpdir+"/library.gob", buffer.Bytes(), 0644)
+
+	exited = (&importer{}).RunCommand("import", []string{
+		"-local=true",
+		"-tag-library", "testdata/tags",
+		"-output-tiles",
+		// "-save-incomplete-tiles",
+		"-o", tmpdir + "/library2.gob",
+		"testdata/pipeline1",
+	}, nil, os.Stderr, os.Stderr)
+	c.Assert(exited, check.Equals, 0)
+
+	exited = (&merger{}).RunCommand("merge", []string{
+		"-local=true",
+		"-o", tmpdir + "/library.gob",
+		tmpdir + "/library1.gob",
+		tmpdir + "/library2.gob",
+	}, nil, os.Stderr, os.Stderr)
+	c.Assert(exited, check.Equals, 0)
+
+	input := tmpdir + "/library.gob"
 
 	exited = (&exporter{}).RunCommand("export", []string{
 		"-local=true",
-		"-input-dir=" + tmpdir,
+		"-input-dir=" + input,
 		"-output-dir=" + tmpdir,
 		"-output-format=hgvs-onehot",
 		"-output-labels=" + tmpdir + "/labels.csv",
 		"-ref=testdata/ref.fasta",
-	}, &buffer, os.Stderr, os.Stderr)
+	}, nil, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	output, err := ioutil.ReadFile(tmpdir + "/out.chr1.tsv")
 	if !c.Check(err, check.IsNil) {
@@ -68,11 +92,11 @@ chr2.471_472delinsAA	1	0
 
 	exited = (&exporter{}).RunCommand("export", []string{
 		"-local=true",
-		"-input-dir=" + tmpdir,
+		"-input-dir=" + input,
 		"-output-dir=" + tmpdir,
 		"-output-format=pvcf",
 		"-ref=testdata/ref.fasta",
-	}, &buffer, os.Stderr, os.Stderr)
+	}, os.Stderr, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
 	c.Check(err, check.IsNil)
@@ -102,11 +126,11 @@ chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
 
 	exited = (&exporter{}).RunCommand("export", []string{
 		"-local=true",
-		"-input-dir=" + tmpdir,
+		"-input-dir=" + input,
 		"-output-dir=" + tmpdir,
 		"-output-format=vcf",
 		"-ref=testdata/ref.fasta",
-	}, &buffer, os.Stderr, os.Stderr)
+	}, nil, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	output, err = ioutil.ReadFile(tmpdir + "/out.chr1.vcf")
 	c.Check(err, check.IsNil)
@@ -136,11 +160,11 @@ chr2	471	.	GG	AA	.	.	AC=1
 	outdir := c.MkDir()
 	exited = (&exporter{}).RunCommand("export", []string{
 		"-local=true",
-		"-input-dir=" + tmpdir,
+		"-input-dir=" + input,
 		"-output-dir=" + outdir,
 		"-output-format=hgvs-numpy",
 		"-ref=testdata/ref.fasta",
-	}, &buffer, os.Stderr, os.Stderr)
+	}, nil, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 
 	f, err := os.Open(outdir + "/matrix.chr1.npy")
@@ -153,7 +177,7 @@ chr2	471	.	GG	AA	.	.	AC=1
 	c.Check(variants, check.HasLen, 6*2*2) // 6 variants * 2 alleles * 2 genomes
 	c.Check(variants, check.DeepEquals, []int8{
 		1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, // input1.1.fasta
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // input2.1.fasta
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, // input2.1.fasta
 	})
 
 	f, err = os.Open(outdir + "/matrix.chr2.npy")
