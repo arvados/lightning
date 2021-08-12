@@ -493,7 +493,13 @@ func eachVariant(bedw io.Writer, taglen int, seqname string, reftiles []tileLibR
 				// This could be either =ref or a
 				// missing/low-quality tile. Figure
 				// out which.
-				v := cgs[i/2].Variants[int(libref.Tag)*2+i%2]
+				vidx := int(libref.Tag)*2 + i%2
+				if vidx >= len(cgs[i/2].Variants) {
+					// Missing tile.
+					varslice[i].New = "-"
+					continue
+				}
+				v := cgs[i/2].Variants[vidx]
 				if v < 1 || len(tilelib.TileVariantSequence(tileLibRef{Tag: libref.Tag, Variant: v})) == 0 {
 					// Missing/low-quality tile.
 					varslice[i].New = "-" // fasta "gap of indeterminate length"
