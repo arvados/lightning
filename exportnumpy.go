@@ -251,19 +251,23 @@ func (cmd *exportNumpy) RunCommand(prog string, args []string, stdin io.Reader, 
 				return
 			}
 			defer f.Close()
-			npw, err := gonpy.NewWriter(f)
+			// gonpy closes our writer and ignores errors. Give it a nopCloser so we can close f properly.
+			npw, err := gonpy.NewWriter(nopCloser{f})
 			if err != nil {
 				lastErr.Store(err)
 				return
 			}
 			npw.Shape = []int{len(names), len(pdis) * 2}
-			npw.WriteInt8(data)
-			// gonpy closes f and ignores errors, doh.
-			// err = f.Close()
-			// if err != nil {
-			// 	lastErr.Store(err)
-			// 	return
-			// }
+			err = npw.WriteInt8(data)
+			if err != nil {
+				lastErr.Store(err)
+				return
+			}
+			err = f.Close()
+			if err != nil {
+				lastErr.Store(err)
+				return
+			}
 		}()
 	}
 	wg.Wait()
