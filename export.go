@@ -39,7 +39,7 @@ type tvVariant struct {
 type outputFormat interface {
 	Filename() string
 	PadLeft() bool
-	Head(out io.Writer, cgs []CompactGenome) error
+	Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error
 	Print(out io.Writer, seqname string, varslice []tvVariant) error
 	Finish(outdir string, out io.Writer, seqname string) error
 	MaxGoroutines() int
@@ -61,6 +61,8 @@ type exporter struct {
 	compress       bool
 	maxTileSize    int
 	filter         filter
+	maxPValue      float64
+	cases          []bool
 }
 
 func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -79,6 +81,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	priority := flags.Int("priority", 500, "container request priority")
 	refname := flags.String("ref", "", "reference genome `name`")
 	inputDir := flags.String("input-dir", ".", "input `directory`")
+	cases := flags.String("cases", "", "file indicating which genomes are positive cases (for computing p-values)")
+	flags.Float64Var(&cmd.maxPValue, "p-value", 1, "do chi square test and omit columns with p-value above this threshold")
 	outputDir := flags.String("output-dir", ".", "output `directory`")
 	outputFormatStr := flags.String("output-format", "hgvs", "output `format`: hgvs, pvcf, or vcf")
 	outputBed := flags.String("output-bed", "", "also output bed `file`")
@@ -144,6 +148,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			"-pprof", ":6000",
 			"-pprof-dir", "/mnt/output",
 			"-ref", *refname,
+			"-cases", *cases,
+			"-p-value", fmt.Sprintf("%f", cmd.maxPValue),
 			"-output-format", *outputFormatStr,
 			"-output-bed", *outputBed,
 			"-output-labels", "/mnt/output/labels.csv",
@@ -211,6 +217,41 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		if err != nil {
 			err = fmt.Errorf("close %s: %w", *labelsFilename, err)
 			return 1
+		}
+	}
+
+	cmd.cases = make([]bool, len(names))
+	if *cases != "" {
+		log.Infof("reading cases file: %s", *cases)
+		f, err := open(*cases)
+		if err != nil {
+			return 1
+		}
+		buf, err := io.ReadAll(f)
+		if err != nil {
+			return 1
+		}
+		for _, pattern := range bytes.Split(buf, []byte("\n")) {
+			if len(pattern) == 0 {
+				continue
+			}
+			pattern := string(pattern)
+			idx := -1
+			for i, name := range names {
+				if !strings.Contains(name, pattern) {
+					continue
+				} else if idx >= 0 {
+					err = fmt.Errorf("pattern %q in cases file matches multiple genome IDs: %q, %q", pattern, names[idx], name)
+					return 1
+				} else {
+					idx = i
+				}
+			}
+			if idx < 0 {
+				log.Warnf("pattern %q in cases file does not match any genome IDs", pattern)
+				continue
+			}
+			cmd.cases[idx] = true
 		}
 	}
 
@@ -309,7 +350,7 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 				defer z.Close()
 				outw[i] = z
 			}
-			err = cmd.outputFormat.Head(outw[i], cgs)
+			err = cmd.outputFormat.Head(outw[i], cgs, cmd.cases, cmd.maxPValue)
 			if err != nil {
 				return err
 			}
@@ -331,7 +372,7 @@ func (cmd *exporter) export(outdir string, bedout io.Writer, tilelib *tileLibrar
 			defer z.Close()
 			out = z
 		}
-		cmd.outputFormat.Head(out, cgs)
+		cmd.outputFormat.Head(out, cgs, cmd.cases, cmd.maxPValue)
 		merge(out, outw, "output")
 	}
 	if bedout != nil {
@@ -568,7 +609,7 @@ func (formatVCF) MaxGoroutines() int                     { return 0 }
 func (formatVCF) Filename() string                       { return "out.vcf" }
 func (formatVCF) PadLeft() bool                          { return true }
 func (formatVCF) Finish(string, io.Writer, string) error { return nil }
-func (formatVCF) Head(out io.Writer, cgs []CompactGenome) error {
+func (formatVCF) Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error {
 	_, err := fmt.Fprint(out, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
 	return err
 }
@@ -601,7 +642,7 @@ func (formatPVCF) MaxGoroutines() int                     { return 0 }
 func (formatPVCF) Filename() string                       { return "out.vcf" }
 func (formatPVCF) PadLeft() bool                          { return true }
 func (formatPVCF) Finish(string, io.Writer, string) error { return nil }
-func (formatPVCF) Head(out io.Writer, cgs []CompactGenome) error {
+func (formatPVCF) Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error {
 	fmt.Fprintln(out, `##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">`)
 	fmt.Fprintf(out, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT")
 	for _, cg := range cgs {
@@ -652,11 +693,11 @@ func (formatPVCF) Print(out io.Writer, seqname string, varslice []tvVariant) err
 
 type formatHGVS struct{}
 
-func (formatHGVS) MaxGoroutines() int                            { return 0 }
-func (formatHGVS) Filename() string                              { return "out.tsv" }
-func (formatHGVS) PadLeft() bool                                 { return false }
-func (formatHGVS) Head(out io.Writer, cgs []CompactGenome) error { return nil }
-func (formatHGVS) Finish(string, io.Writer, string) error        { return nil }
+func (formatHGVS) MaxGoroutines() int                                                     { return 0 }
+func (formatHGVS) Filename() string                                                       { return "out.tsv" }
+func (formatHGVS) PadLeft() bool                                                          { return false }
+func (formatHGVS) Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error { return nil }
+func (formatHGVS) Finish(string, io.Writer, string) error                                 { return nil }
 func (formatHGVS) Print(out io.Writer, seqname string, varslice []tvVariant) error {
 	for i := 0; i < len(varslice)/2; i++ {
 		if i > 0 {
@@ -695,11 +736,13 @@ func (formatHGVS) Print(out io.Writer, seqname string, varslice []tvVariant) err
 
 type formatHGVSOneHot struct{}
 
-func (formatHGVSOneHot) MaxGoroutines() int                            { return 0 }
-func (formatHGVSOneHot) Filename() string                              { return "out.tsv" }
-func (formatHGVSOneHot) PadLeft() bool                                 { return false }
-func (formatHGVSOneHot) Head(out io.Writer, cgs []CompactGenome) error { return nil }
-func (formatHGVSOneHot) Finish(string, io.Writer, string) error        { return nil }
+func (formatHGVSOneHot) MaxGoroutines() int { return 0 }
+func (formatHGVSOneHot) Filename() string   { return "out.tsv" }
+func (formatHGVSOneHot) PadLeft() bool      { return false }
+func (formatHGVSOneHot) Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error {
+	return nil
+}
+func (formatHGVSOneHot) Finish(string, io.Writer, string) error { return nil }
 func (formatHGVSOneHot) Print(out io.Writer, seqname string, varslice []tvVariant) error {
 	vars := map[hgvs.Variant]bool{}
 	for _, v := range varslice {
@@ -739,12 +782,18 @@ type formatHGVSNumpy struct {
 	sync.Mutex
 	writelock sync.Mutex
 	alleles   map[string][][]int8 // alleles[seqname][variantidx][genomeidx*2+phase]
+	cases     []bool
+	maxPValue float64
 }
 
-func (*formatHGVSNumpy) MaxGoroutines() int                            { return 4 }
-func (*formatHGVSNumpy) Filename() string                              { return "annotations.csv" }
-func (*formatHGVSNumpy) PadLeft() bool                                 { return false }
-func (*formatHGVSNumpy) Head(out io.Writer, cgs []CompactGenome) error { return nil }
+func (*formatHGVSNumpy) MaxGoroutines() int { return 4 }
+func (*formatHGVSNumpy) Filename() string   { return "annotations.csv" }
+func (*formatHGVSNumpy) PadLeft() bool      { return false }
+func (f *formatHGVSNumpy) Head(out io.Writer, cgs []CompactGenome, cases []bool, p float64) error {
+	f.cases = cases
+	f.maxPValue = p
+	return nil
+}
 func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVariant) error {
 	// sort variants to ensure output is deterministic
 	sorted := make([]hgvs.Variant, 0, len(varslice))
@@ -757,6 +806,9 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 	seqalleles := f.alleles[seqname]
 	f.Unlock()
 
+	chi2x := make([]bool, 0, len(varslice))
+	chi2y := make([]bool, 0, len(varslice))
+
 	// append a row to seqalleles for each unique non-ref variant
 	// in varslice.
 	var previous hgvs.Variant
@@ -765,13 +817,22 @@ func (f *formatHGVSNumpy) Print(outw io.Writer, seqname string, varslice []tvVar
 			continue
 		}
 		previous = v
+		chi2x, chi2y := chi2x, chi2y
 		newrow := make([]int8, len(varslice))
 		for i, allele := range varslice {
 			if allele.Variant == v {
 				newrow[i] = 1
+				chi2x = append(chi2x, true)
+				chi2y = append(chi2y, f.cases[i/2])
 			} else if allele.Variant.New == "-" {
 				newrow[i] = -1
+			} else {
+				chi2x = append(chi2x, false)
+				chi2y = append(chi2y, f.cases[i/2])
 			}
+		}
+		if f.maxPValue < 1 && pvalue(chi2x, chi2y) > f.maxPValue {
+			continue
 		}
 		seqalleles = append(seqalleles, newrow)
 		_, err := fmt.Fprintf(outw, "%d,%q\n", len(seqalleles)-1, seqname+"."+v.String())

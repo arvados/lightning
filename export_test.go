@@ -214,4 +214,21 @@ chr2	471	.	GG	AA	.	.	AC=1
 5,"chr2.470_472del"
 6,"chr2.471_472delinsAA"
 `)
+
+	c.Logf("export hgvs-numpy with p-value threshold")
+	outdir = c.MkDir()
+	err = ioutil.WriteFile(tmpdir+"/cases", []byte("input1\n"), 0777)
+	c.Assert(err, check.IsNil)
+	exited = (&exporter{}).RunCommand("export", []string{
+		"-local=true",
+		"-input-dir=" + input,
+		"-p-value=0.05",
+		"-cases=" + tmpdir + "/cases",
+		"-output-dir=" + outdir,
+		"-output-format=hgvs-numpy",
+		"-ref=testdata/ref.fasta",
+		"-match-genome=input[12]",
+	}, nil, os.Stderr, os.Stderr)
+	c.Check(exited, check.Equals, 0)
+
 }
