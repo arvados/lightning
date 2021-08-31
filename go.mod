@@ -21,6 +21,7 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
+	golang.org/x/exp v0.0.0-20190125153040-c74c464bbbf2
 	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2
 	golang.org/x/sys v0.0.0-20200519105757-fe76b779f299 // indirect
 	gonum.org/v1/gonum v0.8.1
