@@ -133,7 +133,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 			Priority:    *priority,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputDir)
+		err = runner.TranslatePaths(inputDir, cases)
 		if err != nil {
 			return 1
 		}
@@ -223,11 +223,14 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 	cmd.cases = make([]bool, len(names))
 	if *cases != "" {
 		log.Infof("reading cases file: %s", *cases)
-		f, err := open(*cases)
+		var f io.ReadCloser
+		f, err = open(*cases)
 		if err != nil {
 			return 1
 		}
-		buf, err := io.ReadAll(f)
+		defer f.Close()
+		var buf []byte
+		buf, err = io.ReadAll(f)
 		if err != nil {
 			return 1
 		}
