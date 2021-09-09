@@ -151,7 +151,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 		retainNoCalls:  true,
 		compactGenomes: map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"))
 	if err != nil {
 		return 1
 	}

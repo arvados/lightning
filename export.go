@@ -175,7 +175,7 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		retainTileSequences: true,
 		compactGenomes:      map[string][]tileVariantID{},
 	}
-	err = tilelib.LoadDir(context.Background(), *inputDir, nil)
+	err = tilelib.LoadDir(context.Background(), *inputDir)
 	if err != nil {
 		return 1
 	}

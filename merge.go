@@ -177,7 +177,7 @@ func (cmd *merger) doMerge() error {
 		go func(input string) {
 			defer wg.Done()
 			log.Printf("%s: reading", input)
-			err := cmd.tilelib.LoadGob(ctx, rdr, strings.HasSuffix(input, ".gz"), nil)
+			err := cmd.tilelib.LoadGob(ctx, rdr, strings.HasSuffix(input, ".gz"))
 			if err != nil {
 				cmd.setError(fmt.Errorf("%s: load failed: %w", input, err))
 				cancel()

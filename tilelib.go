@@ -72,6 +72,10 @@ type tileLibrary struct {
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
 
+	onAddTileVariant func(libref tileLibRef, hash [blake2b.Size256]byte, seq []byte) error
+	onAddGenome      func(CompactGenome) error
+	onAddRefseq      func(CompactSequence) error
+
 	mtx   sync.RWMutex
 	vlock []sync.Locker
 }
@@ -121,7 +125,7 @@ func (tilelib *tileLibrary) loadTileVariants(tvs []TileVariant, variantmap map[t
 	return nil
 }
 
-func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap map[tileLibRef]tileVariantID, onLoadGenome func(CompactGenome)) error {
+func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap map[tileLibRef]tileVariantID) error {
 	log.Debugf("loadCompactGenomes: %d", len(cgs))
 	var wg sync.WaitGroup
 	errs := make(chan error, 1)
@@ -150,8 +154,15 @@ func (tilelib *tileLibrary) loadCompactGenomes(cgs []CompactGenome, variantmap m
 				// log.Tracef("loadCompactGenomes: cg %s tag %d variant %d => %d", cg.Name, tag, variant, newvariant)
 				cg.Variants[i] = newvariant
 			}
-			if onLoadGenome != nil {
-				onLoadGenome(cg)
+			if tilelib.onAddGenome != nil {
+				err := tilelib.onAddGenome(cg)
+				if err != nil {
+					select {
+					case errs <- err:
+					default:
+					}
+					return
+				}
 			}
 			if tilelib.encoder != nil {
 				err := tilelib.encoder.Encode(LibraryEntry{
@@ -203,6 +214,12 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 				return err
 			}
 		}
+		if tilelib.onAddRefseq != nil {
+			err := tilelib.onAddRefseq(cseq)
+			if err != nil {
+				return err
+			}
+		}
 		log.Infof("loadCompactSequences: checking %s done", cseq.Name)
 	}
 	tilelib.mtx.Lock()
@@ -217,7 +234,7 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	return nil
 }
 
-func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGenome func(CompactGenome)) error {
+func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string) error {
 	var files []string
 	var walk func(string) error
 	walk = func(path string) error {
@@ -318,7 +335,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string, onLoadGeno
 	for _, cgs := range allcgs {
 		flatcgs = append(flatcgs, cgs...)
 	}
-	err = tilelib.loadCompactGenomes(flatcgs, allvariantmap, onLoadGenome)
+	err = tilelib.loadCompactGenomes(flatcgs, allvariantmap)
 	if err != nil {
 		return err
 	}
@@ -455,9 +472,7 @@ func (tilelib *tileLibrary) WriteDir(dir string) error {
 // Load library data from rdr. Tile variants might be renumbered in
 // the process; in that case, genomes variants will be renumbered to
 // match.
-//
-// If onLoadGenome is non-nil, call it on each CompactGenome entry.
-func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, gz bool, onLoadGenome func(CompactGenome)) error {
+func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, gz bool) error {
 	cgs := []CompactGenome{}
 	cseqs := []CompactSequence{}
 	variantmap := map[tileLibRef]tileVariantID{}
@@ -481,7 +496,7 @@ func (tilelib *tileLibrary) LoadGob(ctx context.Context, rdr io.Reader, gz bool,
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	err = tilelib.loadCompactGenomes(cgs, variantmap, onLoadGenome)
+	err = tilelib.loadCompactGenomes(cgs, variantmap)
 	if err != nil {
 		return err
 	}
@@ -764,12 +779,12 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		locker.Unlock()
 	}
 
+	saveSeq := seq
+	if dropSeq {
+		// Save the hash, but not the sequence
+		saveSeq = nil
+	}
 	if tilelib.encoder != nil {
-		saveSeq := seq
-		if dropSeq {
-			// Save the hash, but not the sequence
-			saveSeq = nil
-		}
 		tilelib.encoder.Encode(LibraryEntry{
 			TileVariants: []TileVariant{{
 				Tag:      tag,
@@ -778,6 +793,9 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 				Sequence: saveSeq,
 			}},
 		})
+	}
+	if tilelib.onAddTileVariant != nil {
+		tilelib.onAddTileVariant(tileLibRef{tag, variant}, seqhash, saveSeq)
 	}
 	return tileLibRef{Tag: tag, Variant: variant}
 }

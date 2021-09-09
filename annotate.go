@@ -118,7 +118,7 @@ func (cmd *annotatecmd) RunCommand(prog string, args []string, stdin io.Reader, 
 		retainNoCalls:       true,
 		retainTileSequences: true,
 	}
-	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"), nil)
+	err = tilelib.LoadGob(context.Background(), input, strings.HasSuffix(*inputFilename, ".gz"))
 	if err != nil {
 		return 1
 	}
