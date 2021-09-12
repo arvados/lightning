@@ -234,36 +234,36 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	return nil
 }
 
-func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string) error {
+func allGobFiles(path string) ([]string, error) {
 	var files []string
-	var walk func(string) error
-	walk = func(path string) error {
-		f, err := open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		fis, err := f.Readdir(-1)
-		if err != nil {
-			files = append(files, path)
-			return nil
-		}
-		for _, fi := range fis {
-			if fi.Name() == "." || fi.Name() == ".." {
-				continue
-			} else if child := path + "/" + fi.Name(); fi.IsDir() {
-				err = walk(child)
-				if err != nil {
-					return err
-				}
-			} else if strings.HasSuffix(child, ".gob") || strings.HasSuffix(child, ".gob.gz") {
-				files = append(files, child)
-			}
-		}
-		return nil
+	f, err := open(path)
+	if err != nil {
+		return nil, err
 	}
+	defer f.Close()
+	fis, err := f.Readdir(-1)
+	if err != nil {
+		return []string{path}, nil
+	}
+	for _, fi := range fis {
+		if fi.Name() == "." || fi.Name() == ".." {
+			continue
+		} else if child := path + "/" + fi.Name(); fi.IsDir() {
+			add, err := allGobFiles(child)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, add...)
+		} else if strings.HasSuffix(child, ".gob") || strings.HasSuffix(child, ".gob.gz") {
+			files = append(files, child)
+		}
+	}
+	return files, nil
+}
+
+func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string) error {
 	log.Infof("LoadDir: walk dir %s", path)
-	err := walk(path)
+	files, err := allGobFiles(path)
 	if err != nil {
 		return err
 	}

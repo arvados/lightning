@@ -18,6 +18,8 @@ import (
 type CompactGenome struct {
 	Name     string
 	Variants []tileVariantID
+	StartTag tagID
+	EndTag   tagID
 }
 
 type CompactSequence struct {
