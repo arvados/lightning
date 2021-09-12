@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 
 	"git.arvados.org/arvados.git/lib/cmd"
 	"github.com/mattn/go-isatty"
@@ -46,6 +47,9 @@ var (
 func Main() {
 	if !isatty.IsTerminal(os.Stderr.Fd()) {
 		logrus.StandardLogger().Formatter = &logrus.TextFormatter{DisableTimestamp: true}
+	}
+	if len(os.Args) >= 2 && !strings.HasSuffix(os.Args[1], "version") {
+		cmd.Version.RunCommand("lightning", nil, nil, os.Stderr, os.Stderr)
 	}
 	os.Exit(handler.RunCommand(os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
