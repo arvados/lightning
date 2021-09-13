@@ -44,3 +44,15 @@ func (t *throttle) Wait() error {
 	t.wg.Wait()
 	return t.Err()
 }
+
+func (t *throttle) Go(f func() error) error {
+	t.Acquire()
+	if t.Err() != nil {
+		return t.Err()
+	}
+	go func() {
+		t.Report(f())
+		t.Release()
+	}()
+	return nil
+}

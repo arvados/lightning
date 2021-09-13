@@ -31,6 +31,7 @@ var (
 		"export-numpy":       &exportNumpy{},
 		"flake":              &flakecmd{},
 		"slice":              &slicecmd{},
+		"slice-numpy":        &sliceNumpy{},
 		"numpy-comvar":       &numpyComVar{},
 		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},
