@@ -60,7 +60,7 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
 			RAM:         200000000000,
-			VCPUs:       4,
+			VCPUs:       32,
 			Priority:    *priority,
 			KeepCache:   50,
 			APIAccess:   true,
@@ -107,7 +107,7 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 		encs       []*gob.Encoder
 	)
 
-	throttle := throttle{Max: runtime.NumCPU()}
+	throttle := throttle{Max: runtime.GOMAXPROCS(0)}
 	for _, path := range infiles {
 		path := path
 		throttle.Acquire()
