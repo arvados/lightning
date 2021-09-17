@@ -164,6 +164,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 
 	log.Info("building list of reference tiles to load") // TODO: more efficient if we had saved all ref tiles in slice0
 	type reftileinfo struct {
+		variant  tileVariantID
 		seqname  string // chr1
 		pos      int    // distance from start of chr1 to start of tile
 		tiledata []byte // acgtggcaa...
@@ -171,7 +172,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	reftile := map[tagID]*reftileinfo{}
 	for seqname, cseq := range refseq {
 		for _, libref := range cseq {
-			reftile[libref.Tag] = &reftileinfo{seqname: seqname}
+			reftile[libref.Tag] = &reftileinfo{seqname: seqname, variant: libref.Variant}
 		}
 	}
 	log.Info("loading reference tiles from all slices")
@@ -187,7 +188,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			defer f.Close()
 			return DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
 				for _, tv := range ent.TileVariants {
-					if dst, ok := reftile[tv.Tag]; ok {
+					if dst, ok := reftile[tv.Tag]; ok && dst.variant == tv.Variant {
 						dst.tiledata = tv.Sequence
 					}
 				}
@@ -341,19 +342,4 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 1
 	}
 	return 0
-}
-
-func (*sliceNumpy) writeLibRefs(fnm string, tilelib *tileLibrary, librefs []tileLibRef) error {
-	f, err := os.OpenFile(fnm, os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	for i, libref := range librefs {
-		_, err = fmt.Fprintf(f, "%d,%d,%d\n", i, libref.Tag, libref.Variant)
-		if err != nil {
-			return err
-		}
-	}
-	return f.Close()
 }
