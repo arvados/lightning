@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
@@ -221,7 +222,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	for infileIdx, infile := range infiles {
 		infileIdx, infile := infileIdx, infile
 		throttle.Go(func() error {
-			seq := map[tagID][][]byte{}
+			seq := make(map[tagID][]TileVariant, 50000)
 			cgs := make(map[string]CompactGenome, len(cgnames))
 			f, err := open(infile)
 			if err != nil {
@@ -233,9 +234,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				for _, tv := range ent.TileVariants {
 					variants := seq[tv.Tag]
 					for len(variants) <= int(tv.Variant) {
-						variants = append(variants, nil)
+						variants = append(variants, TileVariant{})
 					}
-					variants[int(tv.Variant)] = tv.Sequence
+					variants[int(tv.Variant)] = tv
 					seq[tv.Tag] = variants
 				}
 				for _, cg := range ent.CompactGenomes {
@@ -250,7 +251,45 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			tagend := cgs[cgnames[0]].EndTag
 
 			// TODO: filters
-			// TODO: tidy/renumber
+
+			log.Infof("renumbering variants for tags %d-%d", tagstart, tagend)
+			variantRemap := make([][]tileVariantID, tagend-tagstart)
+			var wg sync.WaitGroup
+			for tag, variants := range seq {
+				tag, variants := tag, variants
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					count := make([]tileVariantID, len(variants))
+					for _, cg := range cgs {
+						idx := (tag - tagstart) * 2
+						count[cg.Variants[idx]]++
+						count[cg.Variants[idx+1]]++
+					}
+					ranked := make([]tileVariantID, len(variants))
+					for i := range ranked {
+						ranked[i] = tileVariantID(i)
+					}
+					sort.Slice(ranked, func(i, j int) bool {
+						if i == 0 {
+							return true // leave ranked[0] at position 0, unused
+						} else if j == 0 {
+							return false // ditto
+						}
+						if cri, crj := count[ranked[i]], count[ranked[j]]; cri != crj {
+							return cri > crj
+						} else {
+							return bytes.Compare(variants[ranked[i]].Blake2b[:], variants[ranked[j]].Blake2b[:]) < 0
+						}
+					})
+					remap := make([]tileVariantID, len(ranked))
+					for i, r := range ranked {
+						remap[r] = tileVariantID(i)
+					}
+					variantRemap[tag-tagstart] = remap
+				}()
+			}
+			wg.Wait()
 
 			annotationsFilename := fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, infileIdx)
 			log.Infof("writing %s", annotationsFilename)
@@ -270,17 +309,18 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 				outcol := tag - tagID(tagstart)
 				reftilestr := strings.ToUpper(string(rt.tiledata))
-				for v, seq := range variants {
-					if len(seq) == 0 || !bytes.HasSuffix(rt.tiledata, seq[len(seq)-taglen:]) {
+				remap := variantRemap[tag-tagstart]
+				for v, tv := range variants {
+					if len(tv.Sequence) < taglen || !bytes.HasSuffix(rt.tiledata, tv.Sequence[len(tv.Sequence)-taglen:]) {
 						continue
 					}
-					if lendiff := len(rt.tiledata) - len(seq); lendiff < -1000 || lendiff > 1000 {
+					if lendiff := len(rt.tiledata) - len(tv.Sequence); lendiff < -1000 || lendiff > 1000 {
 						continue
 					}
-					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(seq)), 0)
+					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
 					for _, diff := range diffs {
 						diff.Position += rt.pos
-						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s\n", tag, outcol, v, rt.seqname, diff.String())
+						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s\n", tag, outcol, remap[v], rt.seqname, diff.String())
 					}
 				}
 			}
@@ -300,8 +340,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			for row, name := range cgnames {
 				out := out[row*cols:]
 				for col, v := range cgs[name].Variants {
-					if variants, ok := seq[tagstart+tagID(col/2)]; ok && len(variants) > int(v) && len(variants[v]) > 0 {
-						out[col] = int16(v)
+					if variants, ok := seq[tagstart+tagID(col/2)]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
+						out[col] = int16(variantRemap[col/2][v])
 					} else {
 						out[col] = -1
 					}
