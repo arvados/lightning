@@ -263,8 +263,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					count := make([]tileVariantID, len(variants))
 					for _, cg := range cgs {
 						idx := (tag - tagstart) * 2
-						count[cg.Variants[idx]]++
-						count[cg.Variants[idx+1]]++
+						if int(idx) < len(cg.Variants) {
+							count[cg.Variants[idx]]++
+							count[cg.Variants[idx+1]]++
+						}
 					}
 					ranked := make([]tileVariantID, len(variants))
 					for i := range ranked {
