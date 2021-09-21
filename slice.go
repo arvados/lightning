@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/klauspost/pgzip"
@@ -105,6 +106,10 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 		bufws      []*bufio.Writer
 		gzws       []*pgzip.Writer
 		encs       []*gob.Encoder
+
+		countTileVariants int64
+		countGenomes      int64
+		countReferences   int64
 	)
 
 	throttle := throttle{Max: runtime.GOMAXPROCS(0)}
@@ -145,6 +150,7 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 				if err := throttle.Err(); err != nil {
 					return err
 				}
+				atomic.AddInt64(&countTileVariants, int64(len(ent.TileVariants)))
 				for _, tv := range ent.TileVariants {
 					err := encs[int(tv.Tag)/tagsPerFile].Encode(LibraryEntry{
 						TileVariants: []TileVariant{tv},
@@ -158,6 +164,7 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 				// genome, even if there are no
 				// variants in the relevant range.
 				// Easier for downstream code.
+				atomic.AddInt64(&countGenomes, int64(len(ent.CompactGenomes)))
 				for _, cg := range ent.CompactGenomes {
 					for i, enc := range encs {
 						start := i * tagsPerFile
@@ -185,6 +192,7 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 				}
 				// Write all ref seqs to the first
 				// slice. Easier for downstream code.
+				atomic.AddInt64(&countReferences, int64(len(ent.CompactSequences)))
 				if len(ent.CompactSequences) > 0 {
 					err := encs[0].Encode(LibraryEntry{CompactSequences: ent.CompactSequences})
 					if err != nil {
@@ -201,6 +209,7 @@ func Slice(dstdir, srcdir string, tagsPerFile int) error {
 		closeOutFiles(fs, bufws, gzws, encs)
 		return throttle.Err()
 	}
+	defer log.Printf("Total %d tile variants, %d genomes, %d reference sequences", countTileVariants, countGenomes, countReferences)
 	return closeOutFiles(fs, bufws, gzws, encs)
 }
 
