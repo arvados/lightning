@@ -19,8 +19,20 @@ var _ = check.Suite(&sliceSuite{})
 
 func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	tmpdir := c.MkDir()
+	err := os.Mkdir(tmpdir+"/lib1", 0777)
+	c.Assert(err, check.IsNil)
+	err = os.Mkdir(tmpdir+"/lib2", 0777)
+	c.Assert(err, check.IsNil)
+	err = os.Mkdir(tmpdir+"/lib3", 0777)
+	c.Assert(err, check.IsNil)
+	cwd, err := os.Getwd()
+	c.Assert(err, check.IsNil)
+	err = os.Symlink(cwd+"/testdata/pipeline1", tmpdir+"/pipeline1")
+	c.Assert(err, check.IsNil)
+	err = os.Symlink(cwd+"/testdata/pipeline1", tmpdir+"/pipeline1dup")
+	c.Assert(err, check.IsNil)
 
-	err := ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
+	err = ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
 	c.Check(err, check.IsNil)
 
 	c.Log("=== import testdata/ref ===")
@@ -29,7 +41,7 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 		"-tag-library", "testdata/tags",
 		"-output-tiles",
 		"-save-incomplete-tiles",
-		"-o", tmpdir + "/library1.gob",
+		"-o", tmpdir + "/lib1/library1.gob",
 		"testdata/ref.fasta",
 	}, nil, os.Stderr, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
@@ -39,29 +51,31 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 		"-local=true",
 		"-tag-library", "testdata/tags",
 		"-output-tiles",
-		"-o", tmpdir + "/library2.gob",
-		"testdata/pipeline1",
+		"-o", tmpdir + "/lib2/library2.gob",
+		tmpdir + "/pipeline1",
 	}, nil, os.Stderr, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
 
-	c.Log("=== merge ===")
-	exited = (&merger{}).RunCommand("merge", []string{
+	c.Log("=== import pipeline1dup ===")
+	exited = (&importer{}).RunCommand("import", []string{
 		"-local=true",
-		"-o", tmpdir + "/library.gob",
-		tmpdir + "/library1.gob",
-		tmpdir + "/library2.gob",
+		"-tag-library", "testdata/tags",
+		"-output-tiles",
+		"-o", tmpdir + "/lib3/library3.gob",
+		tmpdir + "/pipeline1dup",
 	}, nil, os.Stderr, os.Stderr)
 	c.Assert(exited, check.Equals, 0)
 
-	input := tmpdir + "/library.gob"
 	slicedir := c.MkDir()
 
 	c.Log("=== slice ===")
 	exited = (&slicecmd{}).RunCommand("slice", []string{
 		"-local=true",
-		"-input-dir=" + input,
 		"-output-dir=" + slicedir,
 		"-tags-per-file=2",
+		tmpdir + "/lib1",
+		tmpdir + "/lib2",
+		tmpdir + "/lib3",
 	}, nil, os.Stderr, os.Stderr)
 	c.Check(exited, check.Equals, 0)
 	out, _ := exec.Command("find", slicedir, "-ls").CombinedOutput()
@@ -83,9 +97,9 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	defer f.Close()
 	npy, err := gonpy.NewReader(f)
 	c.Assert(err, check.IsNil)
-	c.Check(npy.Shape, check.DeepEquals, []int{2, 4})
+	c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
 	variants, err := npy.GetInt16()
-	c.Check(variants, check.DeepEquals, []int16{3, 2, 1, 2, -1, -1, 1, 1})
+	c.Check(variants, check.DeepEquals, []int16{3, 2, 1, 2, -1, -1, 1, 1, 3, 2, 1, 2, -1, -1, 1, 1})
 
 	annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
 	c.Assert(err, check.IsNil)
