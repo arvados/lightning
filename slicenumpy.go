@@ -236,7 +236,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				return err
 			}
 			defer f.Close()
-			log.Infof("reading %s", infile)
+			log.Infof("%04d: reading %s", infileIdx, infile)
 			err = DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
 				for _, tv := range ent.TileVariants {
 					variants := seq[tv.Tag]
@@ -262,7 +262,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 
 			// TODO: filters
 
-			log.Infof("renumber/dedup variants for tags %d-%d", tagstart, tagend)
+			log.Infof("%04d: renumber/dedup variants for tags %d-%d", infileIdx, tagstart, tagend)
 			variantRemap := make([][]tileVariantID, tagend-tagstart)
 			throttleCPU := throttle{Max: runtime.GOMAXPROCS(0)}
 			for tag, variants := range seq {
@@ -313,7 +313,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			throttleCPU.Wait()
 
 			annotationsFilename := fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, infileIdx)
-			log.Infof("writing %s", annotationsFilename)
+			log.Infof("%04d: writing %s", infileIdx, annotationsFilename)
 			annof, err := os.Create(annotationsFilename)
 			if err != nil {
 				return err
@@ -355,7 +355,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			}
 
 			throttleNumpyMem.Acquire()
-			log.Infof("%s: preparing numpy", infile)
+			log.Infof("%04d: preparing numpy", infileIdx)
 			rows := len(cgnames)
 			cols := 2 * int(tagend-tagstart)
 			out := make([]int16, rows*cols)
@@ -387,7 +387,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				"filename": fnm,
 				"rows":     rows,
 				"cols":     cols,
-			}).Info("writing numpy")
+			}).Infof("%04d: writing numpy", infileIdx)
 			npw.Shape = []int{rows, cols}
 			npw.WriteInt16(out)
 			err = bufw.Flush()
