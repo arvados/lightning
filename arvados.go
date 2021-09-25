@@ -520,6 +520,7 @@ var (
 
 type file interface {
 	io.ReadCloser
+	io.Seeker
 	Readdir(n int) ([]os.FileInfo, error)
 }
 
@@ -552,9 +553,23 @@ func open(fnm string) (file, error) {
 		keepClient.BlockCache = &keepclient.BlockCache{MaxBlocks: 4}
 		siteFS = arvadosClientFromEnv.SiteFileSystem(keepClient)
 	} else {
-		keepClient.BlockCache.MaxBlocks++
+		keepClient.BlockCache.MaxBlocks += 2
 	}
 
 	log.Infof("reading %q from %s using Arvados client", fnm[len(mnt):], uuid)
-	return siteFS.Open("by_id/" + uuid + fnm[len(mnt):])
+	f, err := siteFS.Open("by_id/" + uuid + fnm[len(mnt):])
+	if err != nil {
+		return nil, err
+	}
+	return &reduceCacheOnClose{file: f}, nil
+}
+
+type reduceCacheOnClose struct {
+	file
+	once sync.Once
+}
+
+func (rc *reduceCacheOnClose) Close() error {
+	rc.once.Do(func() { keepClient.BlockCache.MaxBlocks -= 2 })
+	return rc.file.Close()
 }
