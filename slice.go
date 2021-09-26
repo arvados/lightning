@@ -134,21 +134,21 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 	)
 
 	throttle := throttle{Max: runtime.GOMAXPROCS(0)}
-	for _, path := range infiles {
-		path := path
+	for _, infile := range infiles {
+		infile := infile
 		throttle.Acquire()
 		go func() {
 			defer throttle.Release()
-			f, err := open(path)
+			f, err := open(infile)
 			if err != nil {
 				throttle.Report(err)
 				return
 			}
 			defer f.Close()
-			dir, _ := filepath.Split(path)
+			dir, _ := filepath.Split(infile)
 			namespace := dirNamespace[dir]
-			log.Printf("reading %s (namespace %d)", path, namespace)
-			err = DecodeLibrary(f, strings.HasSuffix(path, ".gz"), func(ent *LibraryEntry) error {
+			log.Printf("reading %s (namespace %d)", infile, namespace)
+			err = DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
 				if err := throttle.Err(); err != nil {
 					return err
 				}
