@@ -234,7 +234,7 @@ func (cmd *importer) runBatches(stdout io.Writer, inputs []string) error {
 	return nil
 }
 
-func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string) (tileSeq, []importStats, error) {
+func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string, isRef bool) (tileSeq, []importStats, error) {
 	var input io.ReadCloser
 	input, err := open(infile)
 	if err != nil {
@@ -249,7 +249,7 @@ func (cmd *importer) tileFasta(tilelib *tileLibrary, infile string) (tileSeq, []
 		}
 		defer input.Close()
 	}
-	return tilelib.TileFasta(infile, input, cmd.matchChromosome)
+	return tilelib.TileFasta(infile, input, cmd.matchChromosome, isRef)
 }
 
 func (cmd *importer) loadTagLibrary() (*tagLibrary, error) {
@@ -349,7 +349,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				defer phases.Done()
 				log.Printf("%s starting", infile)
 				defer log.Printf("%s done", infile)
-				tseqs, stats, err := cmd.tileFasta(tilelib, infile)
+				tseqs, stats, err := cmd.tileFasta(tilelib, infile, false)
 				allstats[idx*2] = stats
 				var kept, dropped int
 				variants[0], kept, dropped = tseqs.Variants()
@@ -361,7 +361,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				defer phases.Done()
 				log.Printf("%s starting", infile2)
 				defer log.Printf("%s done", infile2)
-				tseqs, stats, err := cmd.tileFasta(tilelib, infile2)
+				tseqs, stats, err := cmd.tileFasta(tilelib, infile2, false)
 				allstats[idx*2+1] = stats
 				var kept, dropped int
 				variants[1], kept, dropped = tseqs.Variants()
@@ -374,7 +374,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				defer phases.Done()
 				log.Printf("%s starting", infile)
 				defer log.Printf("%s done", infile)
-				tseqs, stats, err := cmd.tileFasta(tilelib, infile)
+				tseqs, stats, err := cmd.tileFasta(tilelib, infile, true)
 				allstats[idx*2] = stats
 				if err != nil {
 					return err
@@ -540,7 +540,7 @@ func (cmd *importer) tileGVCF(tilelib *tileLibrary, infile string, phase int) (t
 		return
 	}
 	defer consensus.Wait()
-	tileseq, stats, err = tilelib.TileFasta(fmt.Sprintf("%s phase %d", infile, phase+1), stdout, cmd.matchChromosome)
+	tileseq, stats, err = tilelib.TileFasta(fmt.Sprintf("%s phase %d", infile, phase+1), stdout, cmd.matchChromosome, false)
 	if err != nil {
 		return
 	}

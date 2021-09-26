@@ -71,6 +71,8 @@ type tileLibrary struct {
 	variants       int64
 	// if non-nil, write out any tile variants added while tiling
 	encoder *gob.Encoder
+	// set Ref flag when writing new variants to encoder
+	encodeRef bool
 
 	onAddTileVariant func(libref tileLibRef, hash [blake2b.Size256]byte, seq []byte) error
 	onAddGenome      func(CompactGenome) error
@@ -120,7 +122,7 @@ func (tilelib *tileLibrary) loadTileVariants(tvs []TileVariant, variantmap map[t
 	for _, tv := range tvs {
 		// Assign a new variant ID (unique across all inputs)
 		// for each input variant.
-		variantmap[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).Variant
+		variantmap[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence, tv.Ref).Variant
 	}
 	return nil
 }
@@ -307,7 +309,7 @@ func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string) error {
 					mtx.Unlock()
 				}
 				for _, tv := range ent.TileVariants {
-					variantmap[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence).Variant
+					variantmap[tileLibRef{Tag: tv.Tag, Variant: tv.Variant}] = tilelib.getRef(tv.Tag, tv.Sequence, tv.Ref).Variant
 				}
 				cgs = append(cgs, ent.CompactGenomes...)
 				cseqs = append(cseqs, ent.CompactSequences...)
@@ -546,7 +548,7 @@ type importStats struct {
 	DroppedOutOfOrderTiles int
 }
 
-func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChromosome *regexp.Regexp) (tileSeq, []importStats, error) {
+func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChromosome *regexp.Regexp, isRef bool) (tileSeq, []importStats, error) {
 	ret := tileSeq{}
 	type jobT struct {
 		label string
@@ -630,7 +632,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 				} else {
 					endpos = found[i+1].pos + taglen
 				}
-				path[i] = tilelib.getRef(f.tagid, job.fasta[startpos:endpos])
+				path[i] = tilelib.getRef(f.tagid, job.fasta[startpos:endpos], isRef)
 				if countBases(job.fasta[startpos:endpos]) != endpos-startpos {
 					atomic.AddInt64(&lowquality, 1)
 				}
@@ -667,7 +669,7 @@ func (tilelib *tileLibrary) Len() int64 {
 
 // Return a tileLibRef for a tile with the given tag and sequence,
 // adding the sequence to the library if needed.
-func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
+func (tilelib *tileLibrary) getRef(tag tagID, seq []byte, usedByRef bool) tileLibRef {
 	dropSeq := false
 	if !tilelib.retainNoCalls {
 		for _, b := range seq {
@@ -788,6 +790,7 @@ func (tilelib *tileLibrary) getRef(tag tagID, seq []byte) tileLibRef {
 		tilelib.encoder.Encode(LibraryEntry{
 			TileVariants: []TileVariant{{
 				Tag:      tag,
+				Ref:      usedByRef,
 				Variant:  variant,
 				Blake2b:  seqhash,
 				Sequence: saveSeq,

@@ -47,7 +47,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
 		s.tag[2]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{4, 1}, {0, 1}, {2, 1}}})
 
@@ -59,7 +59,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[1]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[2]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}, {2, 1}}})
 
@@ -71,7 +71,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[3]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[4]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{2, 1}, {3, 1}, {4, 1}}})
 
@@ -83,7 +83,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[0]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[2]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {2, 1}}})
 
@@ -95,7 +95,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[2]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[1]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}}})
 
@@ -109,7 +109,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[1]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[2]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}, {2, 1}}})
 
@@ -125,7 +125,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[0]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[4]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}, {3, 1}, {4, 1}}})
 
@@ -137,7 +137,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 		s.tag[1]+
 		"ggggggggggggggggggggggg\n"+
 		s.tag[3]+
-		"\n"), matchAllChromosomes)
+		"\n"), matchAllChromosomes, false)
 	c.Assert(err, check.IsNil)
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}, {3, 1}}})
 }

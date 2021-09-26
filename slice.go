@@ -176,7 +176,11 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 				atomic.AddInt64(&countTileVariants, int64(len(ent.TileVariants)))
 				for _, tv := range ent.TileVariants {
 					tv.Variant = tileVariantID(int(tv.Variant)*namespaces + namespace)
-					err := encs[int(tv.Tag)/tagsPerFile].Encode(LibraryEntry{
+					fileno := 0
+					if !tv.Ref {
+						fileno = int(tv.Tag) / tagsPerFile
+					}
+					err := encs[fileno].Encode(LibraryEntry{
 						TileVariants: []TileVariant{tv},
 					})
 					if err != nil {

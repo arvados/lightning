@@ -110,10 +110,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 
 	var cgnames []string
 	var refseq map[string][]tileLibRef
+	var reftiledata = make(map[tileLibRef][]byte, 11000000)
 	in0, err := open(infiles[0])
 	if err != nil {
 		return 1
 	}
+
 	taglen := -1
 	DecodeLibrary(in0, strings.HasSuffix(infiles[0], ".gz"), func(ent *LibraryEntry) error {
 		if len(ent.TagSet) > 0 {
@@ -126,6 +128,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		for _, cg := range ent.CompactGenomes {
 			cgnames = append(cgnames, cg.Name)
+		}
+		for _, tv := range ent.TileVariants {
+			if tv.Ref {
+				reftiledata[tileLibRef{tv.Tag, tv.Variant}] = tv.Sequence
+			}
 		}
 		return nil
 	})
@@ -166,7 +173,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 	}
 
-	log.Info("building list of reference tiles to load") // TODO: more efficient if we had saved all ref tiles in slice0
+	log.Info("indexing reference tiles")
 	type reftileinfo struct {
 		variant  tileVariantID
 		seqname  string // chr1
@@ -176,34 +183,15 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	reftile := map[tagID]*reftileinfo{}
 	for seqname, cseq := range refseq {
 		for _, libref := range cseq {
-			reftile[libref.Tag] = &reftileinfo{seqname: seqname, variant: libref.Variant}
+			reftile[libref.Tag] = &reftileinfo{
+				seqname:  seqname,
+				variant:  libref.Variant,
+				tiledata: reftiledata[libref],
+			}
 		}
 	}
-	log.Info("loading reference tiles from all slices")
-	throttleCPU := throttle{Max: runtime.GOMAXPROCS(0)}
-	for _, infile := range infiles {
-		infile := infile
-		throttleCPU.Go(func() error {
-			defer log.Infof("%s: done", infile)
-			f, err := open(infile)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			return DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
-				for _, tv := range ent.TileVariants {
-					if dst, ok := reftile[tv.Tag]; ok && dst.variant == tv.Variant {
-						dst.tiledata = tv.Sequence
-					}
-				}
-				return nil
-			})
-		})
-	}
-	if err = throttleCPU.Wait(); err != nil {
-		return 1
-	}
 
+	throttleCPU := throttle{Max: runtime.GOMAXPROCS(0)}
 	log.Info("reconstructing reference sequences")
 	for seqname, cseq := range refseq {
 		seqname, cseq := seqname, cseq
@@ -213,6 +201,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			for _, libref := range cseq {
 				rt := reftile[libref.Tag]
 				rt.pos = pos
+				if len(rt.tiledata) == 0 {
+					return fmt.Errorf("missing tiledata for tag %d variant %d in %s in ref", libref.Tag, libref.Variant, seqname)
+				}
 				pos += len(rt.tiledata) - taglen
 			}
 			return nil
@@ -239,6 +230,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			log.Infof("%04d: reading %s", infileIdx, infile)
 			err = DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
 				for _, tv := range ent.TileVariants {
+					if tv.Ref {
+						continue
+					}
 					variants := seq[tv.Tag]
 					if len(variants) == 0 {
 						variants = make([]TileVariant, 100)
