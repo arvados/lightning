@@ -13,6 +13,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -116,6 +117,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 1
 	}
 
+	matchGenome, err := regexp.Compile(cmd.filter.MatchGenome)
+	if err != nil {
+		err = fmt.Errorf("-match-genome: invalid regexp: %q", cmd.filter.MatchGenome)
+		return 1
+	}
+
 	taglen := -1
 	DecodeLibrary(in0, strings.HasSuffix(infiles[0], ".gz"), func(ent *LibraryEntry) error {
 		if len(ent.TagSet) > 0 {
@@ -127,7 +134,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			}
 		}
 		for _, cg := range ent.CompactGenomes {
-			cgnames = append(cgnames, cg.Name)
+			if matchGenome.MatchString(cg.Name) {
+				cgnames = append(cgnames, cg.Name)
+			}
 		}
 		for _, tv := range ent.TileVariants {
 			if tv.Ref {
@@ -146,6 +155,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	}
 	if taglen < 0 {
 		err = fmt.Errorf("tagset not found")
+		return 1
+	}
+	if len(cgnames) == 0 {
+		err = fmt.Errorf("no genomes found matching regexp %q", cmd.filter.MatchGenome)
 		return 1
 	}
 	sort.Strings(cgnames)
@@ -244,7 +257,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					seq[tv.Tag] = variants
 				}
 				for _, cg := range ent.CompactGenomes {
-					cgs[cg.Name] = cg
+					if matchGenome.MatchString(cg.Name) {
+						cgs[cg.Name] = cg
+					}
 				}
 				return nil
 			})
