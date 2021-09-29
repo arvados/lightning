@@ -111,14 +111,14 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 	}
 	// dirNamespace[dir] is an int in [0,len(dirNamespace)), used below to
 	// namespace variant numbers from different dirs.
-	dirNamespace := map[string]int{}
+	dirNamespace := map[string]tileVariantID{}
 	for _, path := range infiles {
 		dir, _ := filepath.Split(path)
 		if _, ok := dirNamespace[dir]; !ok {
-			dirNamespace[dir] = len(dirNamespace)
+			dirNamespace[dir] = tileVariantID(len(dirNamespace))
 		}
 	}
-	namespaces := len(dirNamespace)
+	namespaces := tileVariantID(len(dirNamespace))
 
 	var (
 		tagset     [][]byte
@@ -175,7 +175,7 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 				}
 				atomic.AddInt64(&countTileVariants, int64(len(ent.TileVariants)))
 				for _, tv := range ent.TileVariants {
-					tv.Variant = tileVariantID(int(tv.Variant)*namespaces + namespace)
+					tv.Variant = tv.Variant*namespaces + namespace
 					fileno := 0
 					if !tv.Ref {
 						fileno = int(tv.Tag) / tagsPerFile
@@ -196,7 +196,7 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 				for _, cg := range ent.CompactGenomes {
 					for i, v := range cg.Variants {
 						if v > 0 {
-							cg.Variants[i] = tileVariantID(int(v)*namespaces + namespace)
+							cg.Variants[i] = v*namespaces + namespace
 						}
 					}
 					for i, enc := range encs {
@@ -230,7 +230,7 @@ func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 					for _, cs := range ent.CompactSequences {
 						for _, tseq := range cs.TileSequences {
 							for i, libref := range tseq {
-								tseq[i].Variant = tileVariantID(int(libref.Variant)*namespaces + namespace)
+								tseq[i].Variant = libref.Variant*namespaces + namespace
 							}
 						}
 					}
