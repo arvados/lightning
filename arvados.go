@@ -532,11 +532,8 @@ func open(fnm string) (file, error) {
 	if m == nil {
 		return os.Open(fnm)
 	}
-	uuid := m[2]
-	mnt := "/mnt/" + uuid
-	if fnm != mnt && !strings.HasPrefix(fnm, mnt+"/") {
-		return os.Open(fnm)
-	}
+	collectionUUID := m[2]
+	collectionPath := fnm[strings.Index(fnm, collectionUUID)+len(collectionUUID):]
 
 	siteFSMtx.Lock()
 	defer siteFSMtx.Unlock()
@@ -556,8 +553,8 @@ func open(fnm string) (file, error) {
 		keepClient.BlockCache.MaxBlocks += 2
 	}
 
-	log.Infof("reading %q from %s using Arvados client", fnm[len(mnt):], uuid)
-	f, err := siteFS.Open("by_id/" + uuid + fnm[len(mnt):])
+	log.Infof("reading %q from %s using Arvados client", collectionPath, collectionUUID)
+	f, err := siteFS.Open("by_id/" + collectionUUID + collectionPath)
 	if err != nil {
 		return nil, err
 	}
