@@ -392,16 +392,20 @@ func (runner *arvadosContainerRunner) TranslatePaths(paths ...*string) error {
 		if m == nil {
 			return fmt.Errorf("cannot find uuid in path: %q", *path)
 		}
-		uuid := m[2]
-		mnt, ok := runner.Mounts["/mnt/"+uuid]
+		collID := m[2]
+		mnt, ok := runner.Mounts["/mnt/"+collID]
 		if !ok {
 			mnt = map[string]interface{}{
 				"kind": "collection",
-				"uuid": uuid,
 			}
-			runner.Mounts["/mnt/"+uuid] = mnt
+			if len(collID) == 27 {
+				mnt["uuid"] = collID
+			} else {
+				mnt["portable_data_hash"] = collID
+			}
+			runner.Mounts["/mnt/"+collID] = mnt
 		}
-		*path = "/mnt/" + uuid + m[3]
+		*path = "/mnt/" + collID + m[3]
 	}
 	return nil
 }
@@ -533,7 +537,7 @@ func open(fnm string) (file, error) {
 		return os.Open(fnm)
 	}
 	collectionUUID := m[2]
-	collectionPath := fnm[strings.Index(fnm, collectionUUID)+len(collectionUUID):]
+	collectionPath := m[3]
 
 	siteFSMtx.Lock()
 	defer siteFSMtx.Unlock()
