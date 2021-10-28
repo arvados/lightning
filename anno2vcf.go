@@ -97,6 +97,7 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 1
 	}
 	d.Close()
+	sort.Slice(fis, func(i, j int) { return fis[i].Name() < fis[j].Name() })
 
 	type call struct {
 		tile      int
