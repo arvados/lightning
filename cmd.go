@@ -32,6 +32,7 @@ var (
 		"flake":              &flakecmd{},
 		"slice":              &slicecmd{},
 		"slice-numpy":        &sliceNumpy{},
+		"anno2vcf":           &anno2vcf{},
 		"numpy-comvar":       &numpyComVar{},
 		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},

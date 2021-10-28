@@ -22,7 +22,6 @@ import (
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/arvados/lightning/hgvs"
 	"github.com/kshedden/gonpy"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 )
@@ -350,7 +349,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
 					for _, diff := range diffs {
 						diff.Position += rt.pos
-						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s\n", tag, outcol, remap[v], rt.seqname, diff.String())
+						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s\n", tag, outcol, remap[v], rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New)
 					}
 				}
 			}
@@ -392,7 +391,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			if err != nil {
 				return err
 			}
-			log.WithFields(logrus.Fields{
+			log.WithFields(log.Fields{
 				"filename": fnm,
 				"rows":     rows,
 				"cols":     cols,
