@@ -112,4 +112,15 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	} {
 		c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
 	}
+
+	annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
+	c.Assert(err, check.IsNil)
+	c.Logf("%s", annotations)
+	for _, s := range []string{
+		",2,chr2:g.1_3delinsAAA",
+		",2,chr2:g.125_127delinsAAA",
+		",4,chr2:g.125_127delinsAAA",
+	} {
+		c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+	}
 }
