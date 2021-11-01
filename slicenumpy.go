@@ -339,7 +339,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				outcol := tag - tagID(tagstart)
 				reftilestr := strings.ToUpper(string(rt.tiledata))
 				remap := variantRemap[tag-tagstart]
+				done := make([]bool, len(variants))
 				for v, tv := range variants {
+					v := remap[v]
+					if done[v] {
+						continue
+					} else {
+						done[v] = true
+					}
 					if len(tv.Sequence) < taglen || !bytes.HasSuffix(rt.tiledata, tv.Sequence[len(tv.Sequence)-taglen:]) {
 						continue
 					}
@@ -349,7 +356,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
 					for _, diff := range diffs {
 						diff.Position += rt.pos
-						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, outcol, remap[v], rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New, diff.Left)
+						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, outcol, v, rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New, diff.Left)
 					}
 				}
 			}
