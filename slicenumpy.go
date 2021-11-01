@@ -349,7 +349,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
 					for _, diff := range diffs {
 						diff.Position += rt.pos
-						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s\n", tag, outcol, remap[v], rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New)
+						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, outcol, remap[v], rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New, diff.Left)
 					}
 				}
 			}

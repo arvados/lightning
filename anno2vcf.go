@@ -131,8 +131,8 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 					return nil
 				}
 				fields := bytes.Split(line, []byte{','})
-				if len(fields) != 8 {
-					return fmt.Errorf("%s line %d: wrong number of fields (%d != %d): %q", fi.Name(), lineIdx+1, len(fields), 8, line)
+				if len(fields) < 8 {
+					return fmt.Errorf("%s line %d: wrong number of fields (%d < %d): %q", fi.Name(), lineIdx+1, len(fields), 8, line)
 				}
 				tile, _ := strconv.ParseInt(string(fields[0]), 10, 64)
 				variant, _ := strconv.ParseInt(string(fields[2]), 10, 64)
@@ -141,12 +141,27 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 				if calls[seq] == nil {
 					calls[seq] = make([]*call, 0, len(lines)/50)
 				}
+				del := fields[6]
+				ins := fields[7]
+				if len(del) == 0 && len(fields) >= 9 {
+					// "123,,AA,T" means 123insAA
+					// preceded by T. We record it
+					// here as 122TdelinsTAA to
+					// avoid writing an empty
+					// "ref" field in our VCF.
+					del = append([]byte(nil), fields[8]...)
+					ins = append(append([]byte(nil), del...), ins...)
+					position -= int64(len(del))
+				} else {
+					del = append([]byte(nil), del...)
+					ins = append([]byte(nil), ins...)
+				}
 				calls[seq] = append(calls[seq], &call{
 					tile:      int(tile),
 					variant:   int(variant),
 					position:  int(position),
-					deletion:  append([]byte(nil), fields[6]...),
-					insertion: append([]byte(nil), fields[7]...),
+					deletion:  del,
+					insertion: ins,
 				})
 			}
 			mtx.Lock()
