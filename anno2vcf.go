@@ -143,15 +143,18 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 				}
 				del := fields[6]
 				ins := fields[7]
-				if len(del) == 0 && len(fields) >= 9 {
+				if (len(del) == 0 || len(ins) == 0) && len(fields) >= 9 {
 					// "123,,AA,T" means 123insAA
 					// preceded by T. We record it
-					// here as 122TdelinsTAA to
+					// here as "122 T TAA" to
 					// avoid writing an empty
-					// "ref" field in our VCF.
-					del = append([]byte(nil), fields[8]...)
-					ins = append(append([]byte(nil), del...), ins...)
-					position -= int64(len(del))
+					// "ref" field in our
+					// VCF. Similarly, we record
+					// deletions as "122 TAA T"
+					// rather than "123 AA .".
+					del = append(append(make([]byte, 0, len(fields[8])+len(del)), fields[8]...), del...)
+					ins = append(append(make([]byte, 0, len(fields[8])+len(ins)), fields[8]...), ins...)
+					position -= int64(len(fields[8]))
 				} else {
 					del = append([]byte(nil), del...)
 					ins = append([]byte(nil), ins...)
