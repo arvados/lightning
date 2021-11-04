@@ -280,10 +280,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					defer throttleCPU.Release()
 					count := make(map[[blake2b.Size256]byte]int, len(variants))
 					for _, cg := range cgs {
-						idx := (tag - tagstart) * 2
-						if int(idx) < len(cg.Variants) {
-							count[variants[cg.Variants[idx]].Blake2b]++
-							count[variants[cg.Variants[idx+1]].Blake2b]++
+						idx := int(tag-tagstart) * 2
+						if idx < len(cg.Variants) {
+							for allele := 0; allele < 2; allele++ {
+								v := cg.Variants[idx+allele]
+								if v > 0 && len(variants[v].Sequence) > 0 {
+									count[variants[v].Blake2b]++
+								}
+							}
 						}
 					}
 					// hash[i] will be the hash of

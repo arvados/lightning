@@ -99,7 +99,7 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
 	variants, err := npy.GetInt16()
-	c.Check(variants, check.DeepEquals, []int16{3, 2, 1, 2, -1, -1, 1, 1, 3, 2, 1, 2, -1, -1, 1, 1})
+	c.Check(variants, check.DeepEquals, []int16{2, 1, 1, 2, -1, -1, 1, 1, 2, 1, 1, 2, -1, -1, 1, 1})
 
 	annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
 	c.Assert(err, check.IsNil)
