@@ -66,10 +66,10 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 			Name:        "lightning slice",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         200000000000,
+			RAM:         300000000000,
 			VCPUs:       32,
 			Priority:    *priority,
-			KeepCache:   50,
+			KeepCache:   2,
 			APIAccess:   true,
 		}
 		for i := range inputDirs {
