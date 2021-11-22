@@ -404,22 +404,20 @@ func cgs2array(tilelib *tileLibrary, names []string, lowqual []map[tileVariantID
 	return
 }
 
-func chooseTiles(tilelib *tileLibrary, regionsFilename string, expandRegions int) (drop []bool, err error) {
-	if regionsFilename == "" {
-		return
-	}
+func makeMask(regionsFilename string, expandRegions int) (*mask, error) {
+	log.Printf("makeMask: reading %s", regionsFilename)
 	rfile, err := zopen(regionsFilename)
 	if err != nil {
-		return
+		return nil, err
 	}
 	defer rfile.Close()
 	regions, err := ioutil.ReadAll(rfile)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	log.Print("chooseTiles: building mask")
-	mask := &mask{}
+	log.Print("makeMask: building mask")
+	var mask mask
 	for _, line := range bytes.Split(regions, []byte{'\n'}) {
 		if bytes.HasPrefix(line, []byte{'#'}) {
 			continue
@@ -443,14 +441,24 @@ func chooseTiles(tilelib *tileLibrary, regionsFilename string, expandRegions int
 				// GFF/GTF
 				end++
 			} else {
-				err = fmt.Errorf("cannot parse input line as BED or GFF/GTF: %q", line)
-				return
+				return nil, fmt.Errorf("cannot parse input line as BED or GFF/GTF: %q", line)
 			}
 		}
 		mask.Add(refseqname, start-expandRegions, end+expandRegions)
 	}
-	log.Print("chooseTiles: mask.Freeze")
+	log.Print("makeMask: mask.Freeze")
 	mask.Freeze()
+	return &mask, nil
+}
+
+func chooseTiles(tilelib *tileLibrary, regionsFilename string, expandRegions int) (drop []bool, err error) {
+	if regionsFilename == "" {
+		return
+	}
+	mask, err := makeMask(regionsFilename, expandRegions)
+	if err != nil {
+		return
+	}
 
 	tagset := tilelib.taglib.Tags()
 	if len(tagset) == 0 {

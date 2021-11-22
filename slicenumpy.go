@@ -81,12 +81,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			return 1
 		}
 		runner.Args = []string{"slice-numpy", "-local=true",
-			"-pprof", ":6060",
-			"-input-dir", *inputDir,
-			"-output-dir", "/mnt/output",
-			"-threads", fmt.Sprintf("%d", cmd.threads),
-			"-regions", *regionsFilename,
-			"-expand-regions", fmt.Sprintf("%d", *expandRegions),
+			"-pprof=:6060",
+			"-input-dir=" + *inputDir,
+			"-output-dir=/mnt/output",
+			"-threads=" + fmt.Sprintf("%d", cmd.threads),
+			"-regions=" + *regionsFilename,
+			"-expand-regions=" + fmt.Sprintf("%d", *expandRegions),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
@@ -223,7 +223,19 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	}
 	throttleCPU.Wait()
 
-	log.Info("TODO: determining which tiles intersect given regions")
+	var mask *mask
+	if *regionsFilename != "" {
+		mask, err = makeMask(*regionsFilename, *expandRegions)
+		if err != nil {
+			return 1
+		}
+		// Delete reftile entries for masked-out regions.
+		for tag, rt := range reftile {
+			if !mask.Check(strings.TrimPrefix(rt.seqname, "chr"), rt.pos, rt.pos+len(rt.tiledata)) {
+				delete(reftile, tag)
+			}
+		}
+	}
 
 	throttleMem := throttle{Max: cmd.threads} // TODO: estimate using mem and data size
 	throttleNumpyMem := throttle{Max: cmd.threads/2 + 1}
@@ -243,6 +255,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			err = DecodeLibrary(f, strings.HasSuffix(infile, ".gz"), func(ent *LibraryEntry) error {
 				for _, tv := range ent.TileVariants {
 					if tv.Ref {
+						continue
+					}
+					if mask != nil && reftile[tv.Tag] == nil {
+						// Don't waste
+						// time/memory on
+						// masked-out tiles.
 						continue
 					}
 					variants := seq[tv.Tag]
@@ -331,16 +349,25 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				return err
 			}
 			annow := bufio.NewWriterSize(annof, 1<<20)
-			for tag, variants := range seq {
+			outcol := 0
+			for tag := tagstart; tag < tagend; tag++ {
 				rt, ok := reftile[tag]
 				if !ok {
-					// Reference does not use any
-					// variant of this tile.
-					// TODO: log this? mention it
-					// in annotations?
+					if mask == nil {
+						outcol++
+					}
+					// Excluded by specified
+					// regions, or reference does
+					// not use any variant of this
+					// tile. (TODO: log this?
+					// mention it in annotations?)
 					continue
 				}
-				outcol := tag - tagID(tagstart)
+				variants, ok := seq[tag]
+				if !ok {
+					outcol++
+					continue
+				}
 				reftilestr := strings.ToUpper(string(rt.tiledata))
 				remap := variantRemap[tag-tagstart]
 				done := make([]bool, len(variants))
@@ -363,6 +390,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, outcol, v, rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New, diff.Left)
 					}
 				}
+				outcol++
 			}
 			err = annow.Flush()
 			if err != nil {
@@ -373,19 +401,25 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				return err
 			}
 
-			throttleNumpyMem.Acquire()
 			log.Infof("%04d: preparing numpy", infileIdx)
+			throttleNumpyMem.Acquire()
 			rows := len(cgnames)
-			cols := 2 * int(tagend-tagstart)
+			cols := 2 * outcol
 			out := make([]int16, rows*cols)
 			for row, name := range cgnames {
 				out := out[row*cols:]
+				outcol := 0
 				for col, v := range cgs[name].Variants {
-					if variants, ok := seq[tagstart+tagID(col/2)]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
-						out[col] = int16(variantRemap[col/2][v])
-					} else {
-						out[col] = -1
+					tag := tagstart + tagID(col/2)
+					if mask != nil && reftile[tag] == nil {
+						continue
 					}
+					if variants, ok := seq[tag]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
+						out[outcol] = int16(variantRemap[tag-tagstart][v])
+					} else {
+						out[outcol] = -1
+					}
+					outcol++
 				}
 			}
 			seq = nil

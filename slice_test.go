@@ -82,45 +82,87 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	c.Logf("%s", out)
 
 	c.Log("=== slice-numpy ===")
-	npydir := c.MkDir()
-	exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
-		"-local=true",
-		"-input-dir=" + slicedir,
-		"-output-dir=" + npydir,
-	}, nil, os.Stderr, os.Stderr)
-	c.Check(exited, check.Equals, 0)
-	out, _ = exec.Command("find", npydir, "-ls").CombinedOutput()
-	c.Logf("%s", out)
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
 
-	f, err := os.Open(npydir + "/matrix.0000.npy")
-	c.Assert(err, check.IsNil)
-	defer f.Close()
-	npy, err := gonpy.NewReader(f)
-	c.Assert(err, check.IsNil)
-	c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
-	variants, err := npy.GetInt16()
-	c.Check(variants, check.DeepEquals, []int16{2, 1, 1, 2, -1, -1, 1, 1, 2, 1, 1, 2, -1, -1, 1, 1})
+		f, err := os.Open(npydir + "/matrix.0000.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
+		variants, err := npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{2, 1, 1, 2, -1, -1, 1, 1, 2, 1, 1, 2, -1, -1, 1, 1})
 
-	annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
-	c.Assert(err, check.IsNil)
-	c.Logf("%s", annotations)
-	for _, s := range []string{
-		"chr1:g.161A>T",
-		"chr1:g.178A>T",
-		"chr1:g.1_3delinsGGC",
-		"chr1:g.222_224del",
-	} {
-		c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+		for _, s := range []string{
+			"chr1:g.161A>T",
+			"chr1:g.178A>T",
+			"chr1:g.1_3delinsGGC",
+			"chr1:g.222_224del",
+		} {
+			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		}
+
+		annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+		for _, s := range []string{
+			",2,chr2:g.1_3delinsAAA",
+			",2,chr2:g.125_127delinsAAA",
+			",4,chr2:g.125_127delinsAAA",
+		} {
+			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		}
 	}
 
-	annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
-	c.Assert(err, check.IsNil)
-	c.Logf("%s", annotations)
-	for _, s := range []string{
-		",2,chr2:g.1_3delinsAAA",
-		",2,chr2:g.125_127delinsAAA",
-		",4,chr2:g.125_127delinsAAA",
-	} {
-		c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+	c.Log("=== slice-numpy + regions ===")
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-regions=" + tmpdir + "/chr1-12-100.bed",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/matrix.0000.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{4, 2})
+		variants, err := npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{2, 1, -1, -1, 2, 1, -1, -1})
+
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+		for _, s := range []string{
+			"chr1:g.161A>T",
+			"chr1:g.178A>T",
+			"chr1:g.1_3delinsGGC",
+			"chr1:g.222_224del",
+		} {
+			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		}
+
+		annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+		c.Check(string(annotations), check.Equals, "")
 	}
 }
