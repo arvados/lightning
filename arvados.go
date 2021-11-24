@@ -268,7 +268,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 			"priority":            runner.Priority,
 			"state":               arvados.ContainerRequestStateCommitted,
 			"scheduling_parameters": arvados.SchedulingParameters{
-				Preemptible: true,
+				Preemptible: false,
 				Partitions:  []string{},
 			},
 			"environment": map[string]string{
