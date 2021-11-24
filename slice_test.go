@@ -160,9 +160,51 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
 		}
 
-		annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
+		for _, fnm := range []string{
+			npydir + "/matrix.0001.annotations.csv",
+			npydir + "/matrix.0002.annotations.csv",
+		} {
+			annotations, err := ioutil.ReadFile(fnm)
+			c.Assert(err, check.IsNil)
+			c.Check(string(annotations), check.Equals, "", check.Commentf(fnm))
+		}
+	}
+
+	err = ioutil.WriteFile(tmpdir+"/chr1and2-100-200.bed", []byte("chr1\t100\t200\ttest.1\nchr2\t100\t200\ttest.2\n"), 0644)
+	c.Check(err, check.IsNil)
+
+	c.Log("=== slice-numpy + regions + merge ===")
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-regions=" + tmpdir + "/chr1and2-100-200.bed",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+			"-merge-output=true",
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/matrix.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
+		variants, err := npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{2, 1, 3, 1, -1, -1, 4, 2, 2, 1, 3, 1, -1, -1, 4, 2})
+
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.annotations.csv")
 		c.Assert(err, check.IsNil)
 		c.Logf("%s", annotations)
-		c.Check(string(annotations), check.Equals, "")
+		for _, s := range []string{
+			"0,0,1,chr1:g.161A>T",
+			"0,0,1,chr1:g.178A>T",
+			"4,1,2,chr2:g.125_127delinsAAA",
+		} {
+			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		}
 	}
 }

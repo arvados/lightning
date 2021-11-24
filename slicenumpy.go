@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -49,6 +50,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	ref := flags.String("ref", "", "reference name (if blank, choose last one that appears in input)")
 	regionsFilename := flags.String("regions", "", "only output columns/annotations that intersect regions in specified bed `file`")
 	expandRegions := flags.Int("expand-regions", 0, "expand specified regions by `N` base pairs on each side`")
+	mergeOutput := flags.Bool("merge-output", false, "merge output into one matrix.npy and one matrix.annotations.csv")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
 	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
@@ -87,6 +89,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-threads=" + fmt.Sprintf("%d", cmd.threads),
 			"-regions=" + *regionsFilename,
 			"-expand-regions=" + fmt.Sprintf("%d", *expandRegions),
+			"-merge-output=" + fmt.Sprintf("%v", *mergeOutput),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
@@ -235,6 +238,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				delete(reftile, tag)
 			}
 		}
+	}
+
+	var toMerge [][]int16
+	if *mergeOutput {
+		toMerge = make([][]int16, len(infiles))
 	}
 
 	throttleMem := throttle{Max: cmd.threads} // TODO: estimate using mem and data size
@@ -425,31 +433,15 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			seq = nil
 			throttleNumpyMem.Release()
 
-			fnm := fmt.Sprintf("%s/matrix.%04d.npy", *outputDir, infileIdx)
-			output, err := os.Create(fnm)
-			if err != nil {
-				return err
-			}
-			defer output.Close()
-			bufw := bufio.NewWriterSize(output, 1<<26)
-			npw, err := gonpy.NewWriter(nopCloser{bufw})
-			if err != nil {
-				return err
-			}
-			log.WithFields(log.Fields{
-				"filename": fnm,
-				"rows":     rows,
-				"cols":     cols,
-			}).Infof("%04d: writing numpy", infileIdx)
-			npw.Shape = []int{rows, cols}
-			npw.WriteInt16(out)
-			err = bufw.Flush()
-			if err != nil {
-				return err
-			}
-			err = output.Close()
-			if err != nil {
-				return err
+			if *mergeOutput {
+				log.Infof("%04d: matrix fragment %d rows x %d cols", infileIdx, rows, cols)
+				toMerge[infileIdx] = out
+			} else {
+				fnm := fmt.Sprintf("%s/matrix.%04d.npy", *outputDir, infileIdx)
+				err = writeNumpyInt16(fnm, out, rows, cols)
+				if err != nil {
+					return err
+				}
 			}
 			log.Infof("%s: done (%d/%d)", infile, int(atomic.AddInt64(&done, 1)), len(infiles))
 			return nil
@@ -458,5 +450,88 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	if err = throttleMem.Wait(); err != nil {
 		return 1
 	}
+	if *mergeOutput {
+		log.Info("merging output matrix and annotations")
+
+		annoFilename := fmt.Sprintf("%s/matrix.annotations.csv", *outputDir)
+		annof, err := os.Create(annoFilename)
+		if err != nil {
+			return 1
+		}
+		annow := bufio.NewWriterSize(annof, 1<<20)
+
+		rows := len(cgnames)
+		cols := 0
+		for _, chunk := range toMerge {
+			cols += len(chunk) / rows
+		}
+		out := make([]int16, rows*cols)
+		startcol := 0
+		for outIdx, chunk := range toMerge {
+			chunkcols := len(chunk) / rows
+			for row := 0; row < rows; row++ {
+				copy(out[row*cols+startcol:], chunk[row*chunkcols:(row+1)*chunkcols])
+			}
+			toMerge[outIdx] = nil
+
+			annotationsFilename := fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, outIdx)
+			log.Infof("reading %s", annotationsFilename)
+			buf, err := os.ReadFile(annotationsFilename)
+			if err != nil {
+				return 1
+			}
+			err = os.Remove(annotationsFilename)
+			if err != nil {
+				return 1
+			}
+			for _, line := range bytes.Split(buf, []byte{'\n'}) {
+				if len(line) == 0 {
+					continue
+				}
+				fields := bytes.SplitN(line, []byte{','}, 3)
+				incol, _ := strconv.Atoi(string(fields[1]))
+				fmt.Fprintf(annow, "%s,%d,%s\n", fields[0], incol+startcol/2, fields[2])
+			}
+
+			startcol += chunkcols
+		}
+		err = annow.Flush()
+		if err != nil {
+			return 1
+		}
+		err = annof.Close()
+		if err != nil {
+			return 1
+		}
+		err = writeNumpyInt16(fmt.Sprintf("%s/matrix.npy", *outputDir), out, rows, cols)
+		if err != nil {
+			return 1
+		}
+	}
 	return 0
+}
+
+func writeNumpyInt16(fnm string, out []int16, rows, cols int) error {
+	output, err := os.Create(fnm)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+	bufw := bufio.NewWriterSize(output, 1<<26)
+	npw, err := gonpy.NewWriter(nopCloser{bufw})
+	if err != nil {
+		return err
+	}
+	log.WithFields(log.Fields{
+		"filename": fnm,
+		"rows":     rows,
+		"cols":     cols,
+	}).Infof("writing numpy: %s", fnm)
+	npw.Shape = []int{rows, cols}
+	npw.WriteInt16(out)
+	err = bufw.Flush()
+	if err != nil {
+		return err
+	}
+	return output.Close()
 }
