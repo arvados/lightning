@@ -192,41 +192,37 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	type reftileinfo struct {
 		variant  tileVariantID
 		seqname  string // chr1
-		pos      int    // distance from start of chr1 to start of tile
+		pos      int    // distance from start of chromosome to starttag
 		tiledata []byte // acgtggcaa...
 	}
+	isdup := map[tagID]bool{}
 	reftile := map[tagID]*reftileinfo{}
 	for seqname, cseq := range refseq {
+		pos := 0
 		for _, libref := range cseq {
-			reftile[libref.Tag] = &reftileinfo{
-				seqname:  seqname,
-				variant:  libref.Variant,
-				tiledata: reftiledata[libref],
+			tiledata := reftiledata[libref]
+			if len(tiledata) == 0 {
+				err = fmt.Errorf("missing tiledata for tag %d variant %d in %s in ref", libref.Tag, libref.Variant, seqname)
+				return 1
 			}
-		}
-	}
-
-	throttleCPU := throttle{Max: runtime.GOMAXPROCS(0)}
-	log.Info("reconstructing reference sequences")
-	for seqname, cseq := range refseq {
-		seqname, cseq := seqname, cseq
-		throttleCPU.Go(func() error {
-			pos := 0
-			for _, libref := range cseq {
-				rt := reftile[libref.Tag]
-				rt.pos = pos
-				if len(rt.tiledata) == 0 {
-					return fmt.Errorf("missing tiledata for tag %d variant %d in %s in ref", libref.Tag, libref.Variant, seqname)
+			if isdup[libref.Tag] {
+				log.Printf("dropping reference tile %+v from %s, tag not unique", libref, seqname)
+			} else if reftile[libref.Tag] != nil {
+				log.Printf("dropping reference tile %+v from %s, tag not unique", tileLibRef{Tag: libref.Tag, Variant: reftile[libref.Tag].variant}, reftile[libref.Tag].seqname)
+				delete(reftile, libref.Tag)
+				log.Printf("dropping reference tile %+v from %s, tag not unique", libref, seqname)
+				isdup[libref.Tag] = true
+			} else {
+				reftile[libref.Tag] = &reftileinfo{
+					seqname:  seqname,
+					variant:  libref.Variant,
+					tiledata: tiledata,
+					pos:      pos,
 				}
-				pos += len(rt.tiledata) - taglen
 			}
-			log.Printf("... %s done, len %d", seqname, pos)
-			return nil
-		})
-	}
-	err = throttleCPU.Wait()
-	if err != nil {
-		return 1
+			pos += len(tiledata) - taglen
+		}
+		log.Printf("... %s done, len %d", seqname, pos+taglen)
 	}
 
 	var mask *mask
