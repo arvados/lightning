@@ -74,10 +74,10 @@ func (m *mask) freeze(in []interval) intervalTree {
 		itreesize = itreesize * 2
 	}
 	itree := make(intervalTree, itreesize)
-	itree.importSlice(0, in)
-	for i := len(in); i < itreesize; i++ {
+	for i := 0; i < itreesize; i++ {
 		itree[i].maxend = -1
 	}
+	itree.importSlice(0, in)
 	return itree
 }
 
