@@ -27,6 +27,9 @@ type mask struct {
 }
 
 func (m *mask) Add(seqname string, start, end int) {
+	if m.frozen {
+		panic("bug: (*mask)Add() called after Freeze()")
+	}
 	if m.intervals == nil {
 		m.intervals = map[string][]interval{}
 	}
@@ -46,6 +49,17 @@ func (m *mask) Check(seqname string, start, end int) bool {
 		panic("bug: (*mask)Check() called before Freeze()")
 	}
 	return m.itrees[seqname].check(0, interval{start, end})
+}
+
+func (m *mask) Len() int {
+	if !m.frozen {
+		return 0
+	}
+	n := 0
+	for _, intervals := range m.intervals {
+		n += len(intervals)
+	}
+	return n
 }
 
 func (m *mask) freeze(in []interval) intervalTree {

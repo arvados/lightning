@@ -211,7 +211,6 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	for seqname, cseq := range refseq {
 		seqname, cseq := seqname, cseq
 		throttleCPU.Go(func() error {
-			defer log.Printf("... %s done", seqname)
 			pos := 0
 			for _, libref := range cseq {
 				rt := reftile[libref.Tag]
@@ -221,23 +220,30 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 				pos += len(rt.tiledata) - taglen
 			}
+			log.Printf("... %s done, len %d", seqname, pos)
 			return nil
 		})
 	}
-	throttleCPU.Wait()
+	err = throttleCPU.Wait()
+	if err != nil {
+		return 1
+	}
 
 	var mask *mask
 	if *regionsFilename != "" {
+		log.Printf("loading regions from %s", *regionsFilename)
 		mask, err = makeMask(*regionsFilename, *expandRegions)
 		if err != nil {
 			return 1
 		}
-		// Delete reftile entries for masked-out regions.
+		log.Printf("before applying mask, len(reftile) == %d", len(reftile))
+		log.Printf("deleting reftile entries for regions outside %d intervals", mask.Len())
 		for tag, rt := range reftile {
 			if !mask.Check(strings.TrimPrefix(rt.seqname, "chr"), rt.pos, rt.pos+len(rt.tiledata)) {
 				delete(reftile, tag)
 			}
 		}
+		log.Printf("after applying mask, len(reftile) == %d", len(reftile))
 	}
 
 	var toMerge [][]int16
