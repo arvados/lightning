@@ -206,11 +206,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				return 1
 			}
 			if isdup[libref.Tag] {
-				log.Printf("dropping reference tile %+v from %s, tag not unique", libref, seqname)
+				log.Printf("dropping reference tile %+v from %s @ %d, tag not unique", libref, seqname, pos)
 			} else if reftile[libref.Tag] != nil {
-				log.Printf("dropping reference tile %+v from %s, tag not unique", tileLibRef{Tag: libref.Tag, Variant: reftile[libref.Tag].variant}, reftile[libref.Tag].seqname)
+				log.Printf("dropping reference tile %+v from %s @ %d, tag not unique", tileLibRef{Tag: libref.Tag, Variant: reftile[libref.Tag].variant}, reftile[libref.Tag].seqname, reftile[libref.Tag].pos)
 				delete(reftile, libref.Tag)
-				log.Printf("dropping reference tile %+v from %s, tag not unique", libref, seqname)
+				log.Printf("dropping reference tile %+v from %s @ %d, tag not unique", libref, seqname, pos)
 				isdup[libref.Tag] = true
 			} else {
 				reftile[libref.Tag] = &reftileinfo{
