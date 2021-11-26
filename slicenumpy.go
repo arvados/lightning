@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -468,6 +469,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			cols += len(chunk) / rows
 		}
 		out := make([]int16, rows*cols)
+		hgvs := map[string][2][]int16{} // hgvs -> [[g0,g1,g2,...], [g0,g1,g2,...]] (slice of genomes for each phase)
 		startcol := 0
 		for outIdx, chunk := range toMerge {
 			chunkcols := len(chunk) / rows
@@ -490,9 +492,35 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				if len(line) == 0 {
 					continue
 				}
-				fields := bytes.SplitN(line, []byte{','}, 3)
+				fields := bytes.SplitN(line, []byte{','}, 8)
 				incol, _ := strconv.Atoi(string(fields[1]))
-				fmt.Fprintf(annow, "%s,%d,%s\n", fields[0], incol+startcol/2, fields[2])
+				tileVariant, _ := strconv.Atoi(string(fields[2]))
+				hgvsID := string(fields[3])
+				seqname := string(fields[4])
+				pos, _ := strconv.Atoi(string(fields[5]))
+				refseq := fields[6]
+				if mask != nil && !mask.Check(strings.TrimPrefix(seqname, "chr"), pos, pos+len(refseq)) {
+					// The tile intersects one of
+					// the selected regions, but
+					// this particular HGVS
+					// variant does not.
+					continue
+				}
+				fmt.Fprintf(annow, "%s,%d,%d,%s,%s,%d,%s,%s\n", fields[0], incol+startcol/2, tileVariant, hgvsID, seqname, pos, refseq, fields[7])
+				hgvscols := hgvs[hgvsID]
+				if hgvscols[0] == nil {
+					hgvscols = [2][]int16{make([]int16, len(cgnames)), make([]int16, len(cgnames))}
+					hgvs[hgvsID] = hgvscols
+				}
+				for ph := 0; ph < 2; ph++ {
+					for row := 0; row < rows; row++ {
+						if v := chunk[row*chunkcols+incol*2+ph]; int(v) == tileVariant {
+							hgvscols[ph][row] = 1
+						} else if v < 0 {
+							hgvscols[ph][row] = -1
+						}
+					}
+				}
 			}
 
 			startcol += chunkcols
@@ -506,6 +534,37 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			return 1
 		}
 		err = writeNumpyInt16(fmt.Sprintf("%s/matrix.npy", *outputDir), out, rows, cols)
+		if err != nil {
+			return 1
+		}
+		out = nil
+
+		cols = len(hgvs) * 2
+		log.Printf("building hgvs-based matrix: %d rows x %d cols", rows, cols)
+		out = make([]int16, rows*cols)
+		hgvsIDs := make([]string, 0, len(hgvs))
+		for hgvsID := range hgvs {
+			hgvsIDs = append(hgvsIDs, hgvsID)
+		}
+		sort.Strings(hgvsIDs)
+		var hgvsLabels bytes.Buffer
+		for idx, hgvsID := range hgvsIDs {
+			fmt.Fprintf(&hgvsLabels, "%d,%s\n", idx, hgvsID)
+			for ph := 0; ph < 2; ph++ {
+				hgvscol := hgvs[hgvsID][ph]
+				for row, val := range hgvscol {
+					out[row*cols+idx*2+ph] = val
+				}
+			}
+		}
+		err = writeNumpyInt16(fmt.Sprintf("%s/hgvs.npy", *outputDir), out, rows, cols)
+		if err != nil {
+			return 1
+		}
+
+		fnm := fmt.Sprintf("%s/hgvs.annotations.csv", *outputDir)
+		log.Printf("writing hgvs labels: %s", fnm)
+		err = ioutil.WriteFile(fnm, hgvsLabels.Bytes(), 0777)
 		if err != nil {
 			return 1
 		}
