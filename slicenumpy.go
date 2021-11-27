@@ -376,8 +376,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 				variants, ok := seq[tag]
 				if !ok {
-					outcol++
-					continue
+					// how could we even have a reftile if there is no sequence data??
+					return fmt.Errorf("bug: have no variants for tag %d but reftile is %+v", tag, rt)
 				}
 				reftilestr := strings.ToUpper(string(rt.tiledata))
 				remap := variantRemap[tag-tagstart]
@@ -390,9 +390,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						done[v] = true
 					}
 					if len(tv.Sequence) < taglen || !bytes.HasSuffix(rt.tiledata, tv.Sequence[len(tv.Sequence)-taglen:]) {
+						fmt.Fprintf(annow, "%d,%d,%d,.,%s,%d,.,,\n", tag, outcol, v, rt.seqname, rt.pos)
 						continue
 					}
 					if lendiff := len(rt.tiledata) - len(tv.Sequence); lendiff < -1000 || lendiff > 1000 {
+						fmt.Fprintf(annow, "%d,%d,%d,,%s,%d,,,\n", tag, outcol, v, rt.seqname, rt.pos)
 						continue
 					}
 					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
@@ -514,8 +516,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 				for ph := 0; ph < 2; ph++ {
 					for row := 0; row < rows; row++ {
-						if v := chunk[row*chunkcols+incol*2+ph]; int(v) == tileVariant {
-							hgvscols[ph][row] = 1
+						v := chunk[row*chunkcols+incol*2+ph]
+						if int(v) == tileVariant {
+							if len(hgvsID) == 0 {
+								// we have the tile variant sequence, but the diff against ref didn't work out (see lendiff above)
+								hgvscols[ph][row] = -2
+							} else {
+								hgvscols[ph][row] = 1
+							}
 						} else if v < 0 {
 							hgvscols[ph][row] = -1
 						}
