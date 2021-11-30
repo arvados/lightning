@@ -143,6 +143,50 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			in[i+1].Text+in[i+2].Text == in[i+2].Text+in[i+1].Text {
 			in[i+2], in[i+1] = in[i+1], in[i+2]
 		}
+		// when diffmatchpatch says [delAAA, insXAY] and
+		// len(X)==1, we prefer to treat the A>X as a snp.
+		if i < len(in)-1 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffInsert &&
+			len(d.Text) > 2 &&
+			len(in[i+1].Text) > 2 &&
+			d.Text[1] == in[i+1].Text[1] {
+			eqend := 2
+			for ; eqend < len(d.Text) && eqend < len(in[i+1].Text) && d.Text[eqend] == in[i+1].Text[eqend]; eqend++ {
+			}
+			out = append(out,
+				diffmatchpatch.Diff{diffmatchpatch.DiffDelete, d.Text[:1]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffInsert, in[i+1].Text[:1]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffEqual, d.Text[1:eqend]})
+			in[i].Text, in[i+1].Text = in[i].Text[eqend:], in[i+1].Text[eqend:]
+			i--
+			continue
+		}
+		// when diffmatchpatch says [delAAA, insXaY] and
+		// len(Y)==1, we prefer to treat the A>Y as a snp.
+		if i < len(in)-1 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffInsert &&
+			len(d.Text) > 2 &&
+			len(in[i+1].Text) > 2 &&
+			d.Text[len(d.Text)-2] == in[i+1].Text[len(in[i+1].Text)-2] {
+			// eqstart will be the number of equal chars
+			// before the terminal snp, plus 1 for the snp
+			// itself. Example, for [delAAAA, insTTAAG],
+			// eqstart will be 3.
+			eqstart := 2
+			for ; eqstart < len(d.Text) && eqstart < len(in[i+1].Text) && d.Text[len(d.Text)-eqstart] == in[i+1].Text[len(in[i+1].Text)-eqstart]; eqstart++ {
+			}
+			eqstart--
+			out = append(out,
+				diffmatchpatch.Diff{diffmatchpatch.DiffDelete, d.Text[:len(d.Text)-eqstart]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffInsert, in[i+1].Text[:len(in[i+1].Text)-eqstart]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffEqual, d.Text[len(d.Text)-eqstart : len(d.Text)-1]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffDelete, d.Text[len(d.Text)-1:]},
+				diffmatchpatch.Diff{diffmatchpatch.DiffInsert, in[i+1].Text[len(in[i+1].Text)-1:]})
+			i++
+			continue
+		}
 		out = append(out, d)
 	}
 	return
