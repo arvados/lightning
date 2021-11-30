@@ -148,8 +148,8 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 		if i < len(in)-1 &&
 			d.Type == diffmatchpatch.DiffDelete &&
 			in[i+1].Type == diffmatchpatch.DiffInsert &&
-			len(d.Text) > 2 &&
-			len(in[i+1].Text) > 2 &&
+			len(d.Text) >= 2 &&
+			len(in[i+1].Text) >= 2 &&
 			d.Text[1] == in[i+1].Text[1] {
 			eqend := 2
 			for ; eqend < len(d.Text) && eqend < len(in[i+1].Text) && d.Text[eqend] == in[i+1].Text[eqend]; eqend++ {
@@ -167,8 +167,8 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 		if i < len(in)-1 &&
 			d.Type == diffmatchpatch.DiffDelete &&
 			in[i+1].Type == diffmatchpatch.DiffInsert &&
-			len(d.Text) > 2 &&
-			len(in[i+1].Text) > 2 &&
+			len(d.Text) >= 2 &&
+			len(in[i+1].Text) >= 2 &&
 			d.Text[len(d.Text)-2] == in[i+1].Text[len(in[i+1].Text)-2] {
 			// eqstart will be the number of equal chars
 			// before the terminal snp, plus 1 for the snp
