@@ -19,7 +19,12 @@ type throttle struct {
 }
 
 func (t *throttle) Acquire() {
-	t.setupOnce.Do(func() { t.ch = make(chan bool, t.Max) })
+	t.setupOnce.Do(func() {
+		if t.Max < 1 {
+			panic("throttle.Max < 1")
+		}
+		t.ch = make(chan bool, t.Max)
+	})
 	t.wg.Add(1)
 	t.ch <- true
 }
@@ -48,6 +53,7 @@ func (t *throttle) Wait() error {
 func (t *throttle) Go(f func() error) error {
 	t.Acquire()
 	if t.Err() != nil {
+		t.Release()
 		return t.Err()
 	}
 	go func() {
