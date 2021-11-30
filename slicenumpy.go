@@ -374,11 +374,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					// mention it in annotations?)
 					continue
 				}
-				variants, ok := seq[tag]
-				if !ok {
-					// how could we even have a reftile if there is no sequence data??
-					return fmt.Errorf("bug: have no variants for tag %d but reftile is %+v", tag, rt)
-				}
+				variants := seq[tag]
 				reftilestr := strings.ToUpper(string(rt.tiledata))
 				remap := variantRemap[tag-tagstart]
 				done := make([]bool, len(variants))
