@@ -23,6 +23,10 @@ func (v *Variant) String() string {
 	switch {
 	case len(v.New) == 0 && len(v.Ref) == 0:
 		return fmt.Sprintf("%d=", v.Position)
+	case len(v.New) == 1 && v.New == v.Ref:
+		return fmt.Sprintf("%d=", v.Position)
+	case v.New == v.Ref:
+		return fmt.Sprintf("%d_%d=", v.Position, v.Position+len(v.Ref)-1)
 	case len(v.New) == 0 && len(v.Ref) == 1:
 		return fmt.Sprintf("%ddel", v.Position)
 	case len(v.New) == 0:

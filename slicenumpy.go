@@ -308,6 +308,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				go func() {
 					defer throttleCPU.Release()
 					count := make(map[[blake2b.Size256]byte]int, len(variants))
+
+					rt := reftile[tag]
+					if rt != nil {
+						count[blake2b.Sum256(rt.tiledata)] = 0
+					}
+
 					for _, cg := range cgs {
 						idx := int(tag-tagstart) * 2
 						if idx < len(cg.Variants) {
@@ -349,6 +355,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						remap[i] = rank[tv.Blake2b]
 					}
 					variantRemap[tag-tagstart] = remap
+					if rt != nil {
+						rt.variant = rank[blake2b.Sum256(rt.tiledata)]
+					}
 				}()
 			}
 			throttleCPU.Wait()
@@ -374,19 +383,20 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					// mention it in annotations?)
 					continue
 				}
+				fmt.Fprintf(annow, "%d,%d,%d,=,%s,%d,,,\n", tag, outcol, rt.variant, rt.seqname, rt.pos)
 				variants := seq[tag]
 				reftilestr := strings.ToUpper(string(rt.tiledata))
 				remap := variantRemap[tag-tagstart]
 				done := make([]bool, len(variants))
 				for v, tv := range variants {
 					v := remap[v]
-					if done[v] {
+					if v == rt.variant || done[v] {
 						continue
 					} else {
 						done[v] = true
 					}
 					if len(tv.Sequence) < taglen || !bytes.HasSuffix(rt.tiledata, tv.Sequence[len(tv.Sequence)-taglen:]) {
-						fmt.Fprintf(annow, "%d,%d,%d,.,%s,%d,.,,\n", tag, outcol, v, rt.seqname, rt.pos)
+						fmt.Fprintf(annow, "%d,%d,%d,,%s,%d,,,\n", tag, outcol, v, rt.seqname, rt.pos)
 						continue
 					}
 					if lendiff := len(rt.tiledata) - len(tv.Sequence); lendiff < -1000 || lendiff > 1000 {
@@ -467,7 +477,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			cols += len(chunk) / rows
 		}
 		out := make([]int16, rows*cols)
-		hgvs := map[string][2][]int16{} // hgvs -> [[g0,g1,g2,...], [g0,g1,g2,...]] (slice of genomes for each phase)
+		hgvsCols := map[string][2][]int16{} // hgvs -> [[g0,g1,g2,...], [g0,g1,g2,...]] (slice of genomes for each phase)
 		startcol := 0
 		for outIdx, chunk := range toMerge {
 			chunkcols := len(chunk) / rows
@@ -490,13 +500,23 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				if len(line) == 0 {
 					continue
 				}
-				fields := bytes.SplitN(line, []byte{','}, 8)
+				fields := bytes.SplitN(line, []byte{','}, 9)
+				tag, _ := strconv.Atoi(string(fields[0]))
 				incol, _ := strconv.Atoi(string(fields[1]))
 				tileVariant, _ := strconv.Atoi(string(fields[2]))
 				hgvsID := string(fields[3])
 				seqname := string(fields[4])
 				pos, _ := strconv.Atoi(string(fields[5]))
 				refseq := fields[6]
+				if hgvsID == "" {
+					// Null entry for un-diffable
+					// tile variant
+					continue
+				}
+				if hgvsID == "=" {
+					// Null entry for ref tile
+					continue
+				}
 				if mask != nil && !mask.Check(strings.TrimPrefix(seqname, "chr"), pos, pos+len(refseq)) {
 					// The tile intersects one of
 					// the selected regions, but
@@ -504,24 +524,44 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					// variant does not.
 					continue
 				}
-				fmt.Fprintf(annow, "%s,%d,%d,%s,%s,%d,%s,%s\n", fields[0], incol+startcol/2, tileVariant, hgvsID, seqname, pos, refseq, fields[7])
-				hgvscols := hgvs[hgvsID]
-				if hgvscols[0] == nil {
-					hgvscols = [2][]int16{make([]int16, len(cgnames)), make([]int16, len(cgnames))}
-					hgvs[hgvsID] = hgvscols
+				hgvsColPair := hgvsCols[hgvsID]
+				if hgvsColPair[0] == nil {
+					// values in new columns start
+					// out as -1 ("no data yet")
+					// or 0 ("=ref") here, may
+					// change to 1 ("hgvs variant
+					// present") below, either on
+					// this line or a future line.
+					hgvsColPair = [2][]int16{make([]int16, len(cgnames)), make([]int16, len(cgnames))}
+					rt, ok := reftile[tagID(tag)]
+					if !ok {
+						err = fmt.Errorf("bug: seeing annotations for tag %d, but it has no reftile entry", tag)
+						return 1
+					}
+					for ph := 0; ph < 2; ph++ {
+						for row := 0; row < rows; row++ {
+							v := chunk[row*chunkcols+incol*2+ph]
+							if tileVariantID(v) == rt.variant {
+								hgvsColPair[ph][row] = 0
+							} else {
+								hgvsColPair[ph][row] = -1
+							}
+						}
+					}
+					hgvsCols[hgvsID] = hgvsColPair
+					hgvsref := hgvs.Variant{
+						Position: pos,
+						Ref:      string(refseq),
+						New:      string(refseq),
+					}
+					fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, incol+startcol/2, rt.variant, seqname, hgvsref.String(), seqname, pos, refseq, refseq, fields[8])
 				}
+				fmt.Fprintf(annow, "%d,%d,%d,%s,%s,%d,%s,%s,%s\n", tag, incol+startcol/2, tileVariant, hgvsID, seqname, pos, refseq, fields[7], fields[8])
 				for ph := 0; ph < 2; ph++ {
 					for row := 0; row < rows; row++ {
 						v := chunk[row*chunkcols+incol*2+ph]
 						if int(v) == tileVariant {
-							if len(hgvsID) == 0 {
-								// we have the tile variant sequence, but the diff against ref didn't work out (see lendiff above)
-								hgvscols[ph][row] = -2
-							} else {
-								hgvscols[ph][row] = 1
-							}
-						} else if v < 0 {
-							hgvscols[ph][row] = -1
+							hgvsColPair[ph][row] = 1
 						}
 					}
 				}
@@ -543,11 +583,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		out = nil
 
-		cols = len(hgvs) * 2
+		cols = len(hgvsCols) * 2
 		log.Printf("building hgvs-based matrix: %d rows x %d cols", rows, cols)
 		out = make([]int16, rows*cols)
-		hgvsIDs := make([]string, 0, len(hgvs))
-		for hgvsID := range hgvs {
+		hgvsIDs := make([]string, 0, len(hgvsCols))
+		for hgvsID := range hgvsCols {
 			hgvsIDs = append(hgvsIDs, hgvsID)
 		}
 		sort.Strings(hgvsIDs)
@@ -555,7 +595,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		for idx, hgvsID := range hgvsIDs {
 			fmt.Fprintf(&hgvsLabels, "%d,%s\n", idx, hgvsID)
 			for ph := 0; ph < 2; ph++ {
-				hgvscol := hgvs[hgvsID][ph]
+				hgvscol := hgvsCols[hgvsID][ph]
 				for row, val := range hgvscol {
 					out[row*cols+idx*2+ph] = val
 				}
