@@ -68,7 +68,8 @@ func (s *exportSuite) TestFastaToHGVS(c *check.C) {
 		c.Logf("%s", out)
 	}
 	c.Check(sortLines(string(output)), check.Equals, sortLines(`chr1.1_3delinsGGC	1	0
-chr1.41_42delinsAA	1	0
+chr1.41T>A	1	0
+chr1.42T>A	1	0
 chr1.161A>T	1	0
 chr1.178A>T	1	0
 chr1.222_224del	1	0
@@ -82,7 +83,8 @@ chr2.241_254del	1	0
 chr2.258_269delinsAA	1	0
 chr2.315C>A	1	0
 chr2.470_472del	1	0
-chr2.471_472delinsAA	1	0
+chr2.471G>A	1	0
+chr2.472G>A	1	0
 `))
 	labels, err := ioutil.ReadFile(tmpdir + "/labels.csv")
 	c.Check(err, check.IsNil)
@@ -104,7 +106,8 @@ chr2.471_472delinsAA	1	0
 	c.Check(sortLines(string(output)), check.Equals, sortLines(`##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	testdata/pipeline1/input1.1.fasta	testdata/pipeline1/input2.1.fasta
 chr1	1	.	NNN	GGC	.	.	.	GT	1/1	0/0
-chr1	41	.	TT	AA	.	.	.	GT	1/0	0/0
+chr1	41	.	T	A	.	.	.	GT	1/0	0/0
+chr1	42	.	T	A	.	.	.	GT	1/0	0/0
 chr1	161	.	A	T	.	.	.	GT	0/1	0/0
 chr1	178	.	A	T	.	.	.	GT	0/1	0/0
 chr1	221	.	TCCA	T	.	.	.	GT	1/1	0/0
@@ -121,7 +124,8 @@ chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
 chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
 chr2	315	.	C	A	.	.	.	GT	1/0	0/0
 chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
-chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
+chr2	471	.	G	A	.	.	.	GT	0/1	0/0
+chr2	472	.	G	A	.	.	.	GT	0/1	0/0
 `))
 
 	exited = (&exporter{}).RunCommand("export", []string{
@@ -137,7 +141,8 @@ chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
 	c.Log(string(output))
 	c.Check(sortLines(string(output)), check.Equals, sortLines(`#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
 chr1	1	.	NNN	GGC	.	.	AC=2
-chr1	41	.	TT	AA	.	.	AC=1
+chr1	41	.	T	A	.	.	AC=1
+chr1	42	.	T	A	.	.	AC=1
 chr1	161	.	A	T	.	.	AC=1
 chr1	178	.	A	T	.	.	AC=1
 chr1	221	.	TCCA	T	.	.	AC=2
@@ -153,7 +158,8 @@ chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	AC=1
 chr2	258	.	CCTTGTATTTTT	AA	.	.	AC=1
 chr2	315	.	C	A	.	.	AC=1
 chr2	469	.	GTGG	G	.	.	AC=1
-chr2	471	.	GG	AA	.	.	AC=1
+chr2	471	.	G	A	.	.	AC=1
+chr2	472	.	G	A	.	.	AC=1
 `))
 
 	c.Logf("export hgvs-numpy")
@@ -175,10 +181,10 @@ chr2	471	.	GG	AA	.	.	AC=1
 	c.Assert(err, check.IsNil)
 	variants, err := npy.GetInt8()
 	c.Assert(err, check.IsNil)
-	c.Check(variants, check.HasLen, 6*2*2) // 6 variants * 2 alleles * 2 genomes
+	c.Check(variants, check.HasLen, 7*2*2) // 7 variants * 2 alleles * 2 genomes
 	c.Check(variants, check.DeepEquals, []int8{
-		1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, // input1.1.fasta
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, // input2.1.fasta
+		1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, // input1.1.fasta
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, // input2.1.fasta
 	})
 
 	f, err = os.Open(outdir + "/matrix.chr2.npy")
@@ -188,21 +194,22 @@ chr2	471	.	GG	AA	.	.	AC=1
 	c.Assert(err, check.IsNil)
 	variants, err = npy.GetInt8()
 	c.Assert(err, check.IsNil)
-	c.Check(variants, check.HasLen, 7*2*2) // 6 variants * 2 alleles * 2 genomes
+	c.Check(variants, check.HasLen, 8*2*2) // 8 variants * 2 alleles * 2 genomes
 	c.Check(variants, check.DeepEquals, []int8{
-		0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, // input1.1.fasta
-		0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // input2.1.fasta
+		0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, // input1.1.fasta
+		0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // input2.1.fasta
 	})
 
 	annotations, err := ioutil.ReadFile(outdir + "/annotations.chr1.csv")
 	c.Check(err, check.IsNil)
 	c.Logf("%s", string(annotations))
 	c.Check(string(annotations), check.Equals, `0,"chr1.1_3delinsGGC"
-1,"chr1.41_42delinsAA"
-2,"chr1.161A>T"
-3,"chr1.178A>T"
-4,"chr1.222_224del"
-5,"chr1.302_305delinsAAAA"
+1,"chr1.41T>A"
+2,"chr1.42T>A"
+3,"chr1.161A>T"
+4,"chr1.178A>T"
+5,"chr1.222_224del"
+6,"chr1.302_305delinsAAAA"
 `)
 	annotations, err = ioutil.ReadFile(outdir + "/annotations.chr2.csv")
 	c.Check(err, check.IsNil)
@@ -212,7 +219,8 @@ chr2	471	.	GG	AA	.	.	AC=1
 3,"chr2.258_269delinsAA"
 4,"chr2.315C>A"
 5,"chr2.470_472del"
-6,"chr2.471_472delinsAA"
+6,"chr2.471G>A"
+7,"chr2.472G>A"
 `)
 
 	c.Logf("export hgvs-numpy with p-value threshold")

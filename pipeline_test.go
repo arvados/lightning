@@ -96,7 +96,8 @@ func (s *pipelineSuite) TestImportMerge(c *check.C) {
 	hgvsout, err := ioutil.ReadFile(tmpdir + "/out.tsv")
 	c.Check(err, check.IsNil)
 	c.Check(sortLines(string(hgvsout)), check.Equals, sortLines(`chr1:g.1_3delinsGGC	N
-chr1:g.[41_42delinsAA];[41=]	N
+chr1:g.[41T>A];[41=]	N
+chr1:g.[42T>A];[42=]	N
 chr1:g.[161=];[161A>T]	N
 chr1:g.[178=];[178A>T]	N
 chr1:g.222_224del	N
@@ -107,7 +108,8 @@ chr2:g.[241_254del];[241=]	.
 chr2:g.[258_269delinsAA];[258=]	.
 chr2:g.[315C>A];[315=]	.
 chr2:g.[470_472del];[470=]	.
-chr2:g.[471=];[471_472delinsAA]	.
+chr2:g.[471=];[471G>A]	.
+chr2:g.[472=];[472G>A]	.
 `))
 
 	code = (&exporter{}).RunCommand("lightning export", []string{"-local", "-ref", "testdata/ref.fasta", "-output-dir", tmpdir, "-output-format", "pvcf", "-input-dir", tmpdir + "/merged", "-output-bed", tmpdir + "/export.bed", "-output-per-chromosome=false"}, bytes.NewReader(nil), os.Stderr, os.Stderr)
@@ -117,7 +119,8 @@ chr2:g.[471=];[471_472delinsAA]	.
 	c.Check(sortLines(string(vcfout)), check.Equals, sortLines(`##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	testdata/pipeline1/input1.1.fasta	testdata/pipeline1/input2.1.fasta
 chr1	1	.	NNN	GGC	.	.	.	GT	1/1	0/0
-chr1	41	.	TT	AA	.	.	.	GT	1/0	0/0
+chr1	41	.	T	A	.	.	.	GT	1/0	0/0
+chr1	42	.	T	A	.	.	.	GT	1/0	0/0
 chr1	161	.	A	T	.	.	.	GT	0/1	0/0
 chr1	178	.	A	T	.	.	.	GT	0/1	0/0
 chr1	221	.	TCCA	T	.	.	.	GT	1/1	0/0
@@ -128,7 +131,8 @@ chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
 chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
 chr2	315	.	C	A	.	.	.	GT	1/0	0/0
 chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
-chr2	471	.	GG	AA	.	.	.	GT	0/1	0/0
+chr2	471	.	G	A	.	.	.	GT	0/1	0/0
+chr2	472	.	G	A	.	.	.	GT	0/1	0/0
 `))
 	bedout, err := ioutil.ReadFile(tmpdir + "/export.bed")
 	c.Check(err, check.IsNil)
@@ -155,14 +159,16 @@ chr2 472 572 7 1000 . 496 572
 0,0,8d4fe9a63921b,chr1:g.222_224del
 0,0,ba4263ca4199c,chr1:g.1_3delinsGGC
 0,0,ba4263ca4199c,chr1:g.222_224del
-0,0,ba4263ca4199c,chr1:g.41_42delinsAA
+0,0,ba4263ca4199c,chr1:g.41T>A
+0,0,ba4263ca4199c,chr1:g.42T>A
 1,1,139890345dbb8,chr1:g.302_305delinsAAAA
 4,4,cbfca15d241d3,chr2:g.125_127delinsAAA
 4,4,cbfca15d241d3,chr2:g.1_3delinsAAA
 4,4,f5fafe9450b02,chr2:g.241_245delinsAAAAA
 4,4,f5fafe9450b02,chr2:g.291C>A
 4,4,fe9a71a42adb4,chr2:g.125_127delinsAAA
-6,6,e36dce85efbef,chr2:g.471_472delinsAA
+6,6,e36dce85efbef,chr2:g.471G>A
+6,6,e36dce85efbef,chr2:g.472G>A
 6,6,f81388b184f4a,chr2:g.470_472del
 `))
 }

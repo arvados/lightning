@@ -61,7 +61,7 @@ func (s *diffSuite) TestDiff(c *check.C) {
 		{
 			a:      "aaGGttAAtttt",
 			b:      "aaCCttttttC",
-			expect: []string{"3_4delinsCC", "7_8del", "12_13insC"},
+			expect: []string{"3G>C", "4G>C", "7_8del", "12_13insC"},
 		},
 		{
 			// without cleanup, diffmatchpatch solves this as {"3del", "=A", "4_5insA"}
@@ -73,13 +73,13 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			// without cleanup, diffmatchpatch solves this as {"3_4del", "=A", "5_6insAA"}
 			a:      "agggaggggg",
 			b:      "agAAaggggg",
-			expect: []string{"3_4delinsAA"},
+			expect: []string{"3G>A", "4G>A"},
 		},
 		{
 			// without cleanup, diffmatchpatch solves this as {"3_4del", "=A", "5_6insCA"}
 			a:      "agggaggggg",
 			b:      "agACaggggg",
-			expect: []string{"3_4delinsAC"},
+			expect: []string{"3G>A", "4G>C"},
 		},
 		{
 			// without cleanup, diffmatchpatch solves this as {"3_7del", "=A", "8_9insAAACA"}
@@ -96,12 +96,17 @@ func (s *diffSuite) TestDiff(c *check.C) {
 		{
 			a:      "agggaggggg",
 			b:      "agCAaggggg",
-			expect: []string{"3_4delinsCA"},
+			expect: []string{"3G>C", "4G>A"},
 		},
 		{
 			a:      "agggg",
 			b:      "agAAg",
-			expect: []string{"3_4delinsAA"},
+			expect: []string{"3G>A", "4G>A"},
+		},
+		{
+			a:      "aggggg",
+			b:      "agAAAg",
+			expect: []string{"3_5delinsAAA"},
 		},
 		{
 			a:      "acgtgaa",
@@ -132,6 +137,16 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			a:      "tcatagagac",
 			b:      "tcacaagac",
 			expect: []string{"4T>C", "6del"},
+		},
+		{
+			a:      "tcatcgagac",
+			b:      "tcGCcgagac",
+			expect: []string{"3A>G", "4T>C"},
+		},
+		{
+			a:      "tcatcgagac",
+			b:      "tcGCcggac",
+			expect: []string{"3A>G", "4T>C", "7del"},
 		},
 	} {
 		c.Log(trial)

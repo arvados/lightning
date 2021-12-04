@@ -31,7 +31,8 @@ func (s *diffSuite) TestDiff(c *check.C) {
 	c.Check(exited, check.Equals, 0)
 	c.Check("\n"+output.String(), check.Equals, `
 chr2:g.1008C>G	chr2	1008	C	G	false
-chr2:g.1028_1029delinsTT	chr2	1028	AA	TT	false
+chr2:g.1028A>T	chr2	1028	A	T	false
+chr2:g.1029A>T	chr2	1029	A	T	false
 chr2:g.1032_1033insA	chr2	1033		A	false
 `)
 }

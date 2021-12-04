@@ -93,6 +93,17 @@ func Diff(a, b string, timeout time.Duration) ([]Variant, bool) {
 				v.New += diffs[i].Text
 			}
 		}
+		if len(v.Ref) == 2 && len(v.New) == 2 {
+			v1 := v
+			v1.Ref = v1.Ref[:1]
+			v1.New = v1.New[:1]
+			v.Ref = v.Ref[1:]
+			v.New = v.New[1:]
+			v.Position++
+			v.Left = v1.Ref
+			pos++
+			variants = append(variants, v1)
+		}
 		pos += len(v.Ref)
 		variants = append(variants, v)
 		left = ""
@@ -193,6 +204,17 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 		}
 		out = append(out, d)
 	}
+	// for i := 0; i < len(out)-1; i++ {
+	// 	if out[i].Type == diffmatchpatch.DiffDelete && len(out[i].Text) == 2 &&
+	// 		out[i+1].Type == diffmatchpatch.DiffInsert && len(out[i+1].Text) == 2 {
+	// 		out = append(out, diffmatchpatch.Diff{}, diffmatchpatch.Diff{})
+	// 		copy(out[i+4:], out[i+2:])
+	// 		out[i+2] = diffmatchpatch.Diff{diffmatchpatch.DiffDelete, out[i].Text[1:]}
+	// 		out[i+3] = diffmatchpatch.Diff{diffmatchpatch.DiffInsert, out[i+1].Text[1:]}
+	// 		out[i].Text = out[i].Text[:1]
+	// 		out[i+1].Text = out[i+1].Text[:1]
+	// 	}
+	// }
 	return
 }
 
