@@ -105,6 +105,7 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 		position  int
 		deletion  []byte
 		insertion []byte
+		hgvsID    []byte
 	}
 	allcalls := map[string][]*call{}
 	var mtx sync.Mutex
@@ -133,6 +134,12 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 				fields := bytes.Split(line, []byte{','})
 				if len(fields) < 8 {
 					return fmt.Errorf("%s line %d: wrong number of fields (%d < %d): %q", fi.Name(), lineIdx+1, len(fields), 8, line)
+				}
+				hgvsID := fields[3]
+				if len(hgvsID) < 2 {
+					// "=" reference or ""
+					// non-diffable tile variant
+					continue
 				}
 				tile, _ := strconv.ParseInt(string(fields[0]), 10, 64)
 				variant, _ := strconv.ParseInt(string(fields[2]), 10, 64)
@@ -165,6 +172,7 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 					position:  int(position),
 					deletion:  del,
 					insertion: ins,
+					hgvsID:    hgvsID,
 				})
 			}
 			mtx.Lock()
@@ -238,7 +246,7 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 				if len(insertion) == 0 {
 					insertion = placeholder
 				}
-				_, err = fmt.Fprintf(bufw, "%s\t%d\t.\t%s\t%s\t.\t.\t%s\n", seq, call.position, deletion, insertion, info)
+				_, err = fmt.Fprintf(bufw, "%s\t%d\t%s\t%s\t%s\t.\t.\t%s\n", seq, call.position, call.hgvsID, deletion, insertion, info)
 				if err != nil {
 					return err
 				}
