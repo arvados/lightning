@@ -73,7 +73,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			Name:        "lightning slice-numpy",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         650000000000,
+			RAM:         750000000000,
 			VCPUs:       96,
 			Priority:    *priority,
 			KeepCache:   2,
