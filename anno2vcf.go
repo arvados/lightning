@@ -128,7 +128,7 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 				if len(line) == 0 {
 					continue
 				}
-				if lineIdx & ^0xfff == 0 && thr.Err() != nil {
+				if lineIdx&0xff == 0 && thr.Err() != nil {
 					return nil
 				}
 				fields := bytes.Split(line, []byte{','})
