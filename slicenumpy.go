@@ -17,6 +17,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -526,6 +527,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 			}
 			seq = nil
+			cgs = nil
+			debug.FreeOSMemory()
 			throttleNumpyMem.Release()
 
 			if *mergeOutput || *hgvsSingle {
@@ -538,6 +541,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				if err != nil {
 					return err
 				}
+				debug.FreeOSMemory()
 			}
 			log.Infof("%s: done (%d/%d)", infile, int(atomic.AddInt64(&done, 1)), len(infiles))
 			return nil

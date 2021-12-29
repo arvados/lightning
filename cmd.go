@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strings"
 
 	"git.arvados.org/arvados.git/lib/cmd"
@@ -45,6 +46,12 @@ var (
 		"dumpgob":            &dumpGob{},
 	})
 )
+
+func init() {
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(30)
+	}
+}
 
 func Main() {
 	if !isatty.IsTerminal(os.Stderr.Fd()) {
