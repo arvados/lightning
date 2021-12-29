@@ -309,9 +309,16 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					seq[tv.Tag] = variants
 				}
 				for _, cg := range ent.CompactGenomes {
-					if matchGenome.MatchString(cg.Name) {
-						cgs[cg.Name] = cg
+					if !matchGenome.MatchString(cg.Name) {
+						continue
 					}
+					// pad to full slice size
+					// to avoid out-of-bounds
+					// checks later
+					if sliceSize := int(cg.EndTag - cg.StartTag); len(cg.Variants) < sliceSize {
+						cg.Variants = append(cg.Variants, make([]tileVariantID, sliceSize-len(cg.Variants))...)
+					}
+					cgs[cg.Name] = cg
 				}
 				return nil
 			})
@@ -340,12 +347,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 
 					for _, cg := range cgs {
 						idx := int(tag-tagstart) * 2
-						if idx < len(cg.Variants) {
-							for allele := 0; allele < 2; allele++ {
-								v := cg.Variants[idx+allele]
-								if v > 0 && len(variants[v].Sequence) > 0 {
-									count[variants[v].Blake2b]++
-								}
+						for allele := 0; allele < 2; allele++ {
+							v := cg.Variants[idx+allele]
+							if v > 0 && len(variants[v].Sequence) > 0 {
+								count[variants[v].Blake2b]++
 							}
 						}
 					}
