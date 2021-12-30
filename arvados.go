@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -297,14 +298,18 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 
 	lastState := cr.State
 	refreshCR := func() {
-		err = runner.Client.RequestAndDecode(&cr, "GET", "arvados/v1/container_requests/"+cr.UUID, nil, nil)
+		ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Minute))
+		defer cancel()
+		err = runner.Client.RequestAndDecodeContext(ctx, &cr, "GET", "arvados/v1/container_requests/"+cr.UUID, nil, nil)
 		if err != nil {
 			fmt.Fprint(os.Stderr, neednewline)
+			neednewline = ""
 			log.Printf("error getting container request: %s", err)
 			return
 		}
 		if lastState != cr.State {
 			fmt.Fprint(os.Stderr, neednewline)
+			neednewline = ""
 			log.Printf("container request state: %s", cr.State)
 			lastState = cr.State
 		}
@@ -321,7 +326,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 		}
 	}
 
-	var reCrunchstat = regexp.MustCompile(`mem .* rss`)
+	var reCrunchstat = regexp.MustCompile(`mem .* (\d+) rss`)
 waitctr:
 	for cr.State != arvados.ContainerRequestStateFinal {
 		select {
@@ -351,9 +356,10 @@ waitctr:
 				}
 			case "crunchstat":
 				for _, line := range strings.Split(msg.Properties.Text, "\n") {
-					mem := reCrunchstat.FindString(line)
-					if mem != "" {
-						fmt.Fprintf(os.Stderr, "%s               \r", mem)
+					m := reCrunchstat.FindStringSubmatch(line)
+					if m != nil {
+						rss, _ := strconv.ParseInt(m[1], 10, 64)
+						fmt.Fprintf(os.Stderr, "%s rss %.3f GB           \r", cr.UUID, float64(rss)/1e9)
 						neednewline = "\n"
 					}
 				}
