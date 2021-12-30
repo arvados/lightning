@@ -454,8 +454,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						continue
 					}
 					diffs, _ := hgvs.Diff(reftilestr, strings.ToUpper(string(tv.Sequence)), 0)
+					for i := range diffs {
+						diffs[i].Position += rt.pos
+					}
 					for _, diff := range diffs {
-						diff.Position += rt.pos
 						fmt.Fprintf(annow, "%d,%d,%d,%s:g.%s,%s,%d,%s,%s,%s\n", tag, outcol, v, rt.seqname, diff.String(), rt.seqname, diff.Position, diff.Ref, diff.New, diff.Left)
 					}
 					if *hgvsChunked {
