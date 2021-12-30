@@ -134,6 +134,7 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 			"-regions=" + tmpdir + "/chr1-12-100.bed",
 			"-input-dir=" + slicedir,
 			"-output-dir=" + npydir,
+			"-chunked-hgvs-matrix=true",
 		}, nil, os.Stderr, os.Stderr)
 		c.Check(exited, check.Equals, 0)
 		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
@@ -182,6 +183,7 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 			"-input-dir=" + slicedir,
 			"-output-dir=" + npydir,
 			"-merge-output=true",
+			"-single-hgvs-matrix=true",
 		}, nil, os.Stderr, os.Stderr)
 		c.Check(exited, check.Equals, 0)
 		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
