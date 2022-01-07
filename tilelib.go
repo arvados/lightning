@@ -556,6 +556,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 	}
 	todo := make(chan jobT, 1)
 	scanner := bufio.NewScanner(rdr)
+	scanner.Buffer(make([]byte, 256), 1<<29) // 512 MiB, in case fasta does not have line breaks
 	go func() {
 		defer close(todo)
 		var fasta []byte
