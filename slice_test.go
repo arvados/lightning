@@ -209,4 +209,30 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
 		}
 	}
+
+	c.Log("=== slice-numpy + chunked hgvs matrix ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/cases.txt", []byte("pipeline1/input1\npipeline1dup/input1\n"), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-chunked-hgvs-matrix=true",
+			"-chi2-cases-file=" + tmpdir + "/cases.txt",
+			"-chi2-p-value=0.05",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		annotations, err := ioutil.ReadFile(npydir + "/hgvs.chr2.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Check(string(annotations), check.Equals, `0,chr2:g.470_472del
+1,chr2:g.471G>A
+2,chr2:g.472G>A
+`)
+	}
 }

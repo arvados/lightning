@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -31,8 +32,12 @@ import (
 )
 
 type sliceNumpy struct {
-	filter  filter
-	threads int
+	filter        filter
+	threads       int
+	chi2CasesFile string
+	chi2Cases     []bool
+	chi2PValue    float64
+	minCoverage   int
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -57,6 +62,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	hgvsSingle := flags.Bool("single-hgvs-matrix", false, "also generate hgvs-based matrix")
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
+	flags.StringVar(&cmd.chi2CasesFile, "chi2-cases-file", "", "text file indicating positive cases (for Χ² test)")
+	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
 	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -72,6 +79,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}()
 	}
 
+	if cmd.chi2CasesFile == "" && cmd.chi2PValue != 1 {
+		log.Errorf("cannot use provided -chi2-p-value=%f because -chi2-cases-file= value is empty", cmd.chi2PValue)
+		return 2
+	}
+
 	if !*runlocal {
 		runner := arvadosContainerRunner{
 			Name:        "lightning slice-numpy",
@@ -83,7 +95,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			KeepCache:   2,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputDir, regionsFilename)
+		err = runner.TranslatePaths(inputDir, regionsFilename, &cmd.chi2CasesFile)
 		if err != nil {
 			return 1
 		}
@@ -97,6 +109,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-merge-output=" + fmt.Sprintf("%v", *mergeOutput),
 			"-single-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsSingle),
 			"-chunked-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsChunked),
+			"-chi2-cases-file=" + cmd.chi2CasesFile,
+			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
@@ -171,6 +185,48 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 1
 	}
 	sort.Strings(cgnames)
+
+	cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cgnames))))
+
+	if cmd.chi2CasesFile != "" {
+		f, err2 := open(cmd.chi2CasesFile)
+		if err2 != nil {
+			err = err2
+			return 1
+		}
+		buf, err2 := io.ReadAll(f)
+		f.Close()
+		if err2 != nil {
+			err = err2
+			return 1
+		}
+		cmd.chi2Cases = make([]bool, len(cgnames))
+		ncases := 0
+		for _, pattern := range bytes.Split(buf, []byte{'\n'}) {
+			if len(pattern) == 0 {
+				continue
+			}
+			pattern := string(pattern)
+			idx := -1
+			for i, name := range cgnames {
+				if !strings.Contains(name, pattern) {
+					continue
+				}
+				cmd.chi2Cases[i] = true
+				ncases++
+				if idx >= 0 {
+					log.Warnf("pattern %q in cases file matches multiple genome IDs: %q, %q", pattern, cgnames[idx], name)
+				} else {
+					idx = i
+				}
+			}
+			if idx < 0 {
+				log.Warnf("pattern %q in cases file does not match any genome IDs", pattern)
+				continue
+			}
+		}
+		log.Printf("%d cases, %d controls", ncases, len(cgnames)-ncases)
+	}
 
 	{
 		labelsFilename := *outputDir + "/labels.csv"
@@ -507,7 +563,15 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 							}
 						}
 					}
-					encodeHGVSTodo[rt.seqname] <- hgvsCol
+					for diff, colpair := range hgvsCol {
+						allele2homhet(colpair)
+						if !cmd.filterHGVScolpair(colpair) {
+							delete(hgvsCol, diff)
+						}
+					}
+					if len(hgvsCol) > 0 {
+						encodeHGVSTodo[rt.seqname] <- hgvsCol
+					}
 				}
 				outcol++
 			}
@@ -809,6 +873,25 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	return 0
 }
 
+func (cmd *sliceNumpy) filterHGVScolpair(colpair [2][]int8) bool {
+	if cmd.chi2PValue >= 1 {
+		return true
+	}
+	col0 := make([]bool, 0, len(cmd.chi2Cases))
+	col1 := make([]bool, 0, len(cmd.chi2Cases))
+	cases := make([]bool, 0, len(cmd.chi2Cases))
+	for i, c := range cmd.chi2Cases {
+		if colpair[0][i] < 0 {
+			continue
+		}
+		col0 = append(col0, colpair[0][i] != 0)
+		col1 = append(col1, colpair[1][i] != 0)
+		cases = append(cases, c)
+	}
+	return len(cases) >= cmd.minCoverage &&
+		(pvalue(cases, col0) <= cmd.chi2PValue || pvalue(cases, col1) <= cmd.chi2PValue)
+}
+
 func writeNumpyInt16(fnm string, out []int16, rows, cols int) error {
 	output, err := os.Create(fnm)
 	if err != nil {
@@ -857,4 +940,24 @@ func writeNumpyInt8(fnm string, out []int8, rows, cols int) error {
 		return err
 	}
 	return output.Close()
+}
+
+func allele2homhet(colpair [2][]int8) {
+	a, b := colpair[0], colpair[1]
+	for i, av := range a {
+		bv := b[i]
+		if av < 0 || bv < 0 {
+			// no-call
+			a[i], b[i] = -1, -1
+		} else if av > 0 && bv > 0 {
+			// hom
+			a[i], b[i] = 1, 0
+		} else if av > 0 || bv > 0 {
+			// het
+			a[i], b[i] = 0, 1
+		} else {
+			// ref (or a different variant in same position)
+			// (this is a no-op) a[i], b[i] = 0, 0
+		}
+	}
 }
