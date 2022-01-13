@@ -196,7 +196,9 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
 		variants, err := npy.GetInt16()
-		c.Check(variants, check.DeepEquals, []int16{2, 1, 3, 1, -1, -1, 4, 2, 2, 1, 3, 1, -1, -1, 4, 2})
+		if c.Check(err, check.IsNil) {
+			c.Check(variants, check.DeepEquals, []int16{2, 1, 3, 1, -1, -1, 4, 2, 2, 1, 3, 1, -1, -1, 4, 2})
+		}
 
 		annotations, err := ioutil.ReadFile(npydir + "/matrix.annotations.csv")
 		c.Assert(err, check.IsNil)
@@ -234,5 +236,43 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 1,chr2:g.471G>A
 2,chr2:g.472G>A
 `)
+	}
+
+	c.Log("=== slice-numpy + onehot ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/cases.txt", []byte("pipeline1/input1\npipeline1dup/input1\n"), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-chunked-onehot=true",
+			"-chi2-cases-file=" + tmpdir + "/cases.txt",
+			"-chi2-p-value=0.05",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/onehot.0002.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{4, 6})
+		onehot, err := npy.GetInt8()
+		if c.Check(err, check.IsNil) {
+			for r := 0; r < npy.Shape[0]; r++ {
+				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
+			}
+			c.Check(onehot, check.DeepEquals, []int8{
+				0, 0, 0, 1, 0, 0, // input1
+				0, 1, 0, 0, 0, 1, // input2
+				0, 0, 0, 1, 0, 0, // dup/input1
+				0, 1, 0, 0, 0, 1, // dup/input2
+			})
+		}
 	}
 }
