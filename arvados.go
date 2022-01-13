@@ -178,7 +178,7 @@ reconnect:
 				}
 				client.mtx.Lock()
 				for ch := range client.notifying[msg.ObjectUUID] {
-					ch <- msg
+					go func() { ch <- msg }()
 				}
 				client.mtx.Unlock()
 			}
