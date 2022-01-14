@@ -103,7 +103,7 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 func Slice(tagsPerFile int, dstdir string, srcdirs []string) error {
 	var infiles []string
 	for _, srcdir := range srcdirs {
-		files, err := allGobFiles(srcdir)
+		files, err := allFiles(srcdir, matchGobFile)
 		if err != nil {
 			return err
 		}

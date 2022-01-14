@@ -32,13 +32,14 @@ import (
 )
 
 type sliceNumpy struct {
-	filter        filter
-	threads       int
-	chi2CasesFile string
-	chi2Cases     []bool
-	chi2PValue    float64
-	minCoverage   int
-	cgnames       []string
+	filter                filter
+	threads               int
+	chi2CaseControlColumn string
+	chi2CaseControlFile   string
+	chi2Cases             []bool
+	chi2PValue            float64
+	minCoverage           int
+	cgnames               []string
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -64,7 +65,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
-	flags.StringVar(&cmd.chi2CasesFile, "chi2-cases-file", "", "text file indicating positive cases (for Χ² test)")
+	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
+	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
 	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
@@ -81,8 +83,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}()
 	}
 
-	if cmd.chi2CasesFile == "" && cmd.chi2PValue != 1 {
-		log.Errorf("cannot use provided -chi2-p-value=%f because -chi2-cases-file= value is empty", cmd.chi2PValue)
+	if cmd.chi2PValue != 1 && (cmd.chi2CaseControlFile == "" || cmd.chi2CaseControlColumn == "") {
+		log.Errorf("cannot use provided -chi2-p-value=%f because -chi2-case-control-file= or -chi2-case-control-column= value is empty", cmd.chi2PValue)
 		return 2
 	}
 
@@ -97,7 +99,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			KeepCache:   2,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputDir, regionsFilename, &cmd.chi2CasesFile)
+		err = runner.TranslatePaths(inputDir, regionsFilename, &cmd.chi2CaseControlFile)
 		if err != nil {
 			return 1
 		}
@@ -112,7 +114,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-single-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsSingle),
 			"-chunked-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsChunked),
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
-			"-chi2-cases-file=" + cmd.chi2CasesFile,
+			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
+			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
@@ -125,7 +128,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 0
 	}
 
-	infiles, err := allGobFiles(*inputDir)
+	infiles, err := allFiles(*inputDir, matchGobFile)
 	if err != nil {
 		return 1
 	}
@@ -188,51 +191,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		return 1
 	}
 	sort.Strings(cmd.cgnames)
-
+	err = cmd.useCaseControlFiles()
+	if err != nil {
+		return 1
+	}
 	cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
 
-	if cmd.chi2CasesFile != "" {
-		f, err2 := open(cmd.chi2CasesFile)
-		if err2 != nil {
-			err = err2
-			return 1
-		}
-		buf, err2 := io.ReadAll(f)
-		f.Close()
-		if err2 != nil {
-			err = err2
-			return 1
-		}
-		cmd.chi2Cases = make([]bool, len(cmd.cgnames))
-		ncases := 0
-		for _, pattern := range bytes.Split(buf, []byte{'\n'}) {
-			if len(pattern) == 0 {
-				continue
-			}
-			pattern := string(pattern)
-			idx := -1
-			for i, name := range cmd.cgnames {
-				if !strings.Contains(name, pattern) {
-					continue
-				}
-				cmd.chi2Cases[i] = true
-				ncases++
-				if idx >= 0 {
-					log.Warnf("pattern %q in cases file matches multiple genome IDs: %q, %q", pattern, cmd.cgnames[idx], name)
-				} else {
-					idx = i
-				}
-			}
-			if idx < 0 {
-				log.Warnf("pattern %q in cases file does not match any genome IDs", pattern)
-				continue
-			}
-		}
-		log.Printf("%d cases, %d controls", ncases, len(cmd.cgnames)-ncases)
-	}
-
 	{
-		labelsFilename := *outputDir + "/labels.csv"
+		labelsFilename := *outputDir + "/samples.csv"
 		log.Infof("writing labels to %s", labelsFilename)
 		var f *os.File
 		f, err = os.Create(labelsFilename)
@@ -241,7 +207,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		defer f.Close()
 		for i, name := range cmd.cgnames {
-			_, err = fmt.Fprintf(f, "%d,%q\n", i, trimFilenameForLabel(name))
+			cc := 0
+			if cmd.chi2Cases != nil && cmd.chi2Cases[i] {
+				cc = 1
+			}
+			_, err = fmt.Fprintf(f, "%d,%q,%d\n", i, trimFilenameForLabel(name), cc)
 			if err != nil {
 				err = fmt.Errorf("write %s: %w", labelsFilename, err)
 				return 1
@@ -924,6 +894,89 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 	}
 	return 0
+}
+
+// Read case/control files, remove non-case/control entries from
+// cmd.cgnames, and build cmd.chi2Cases.
+func (cmd *sliceNumpy) useCaseControlFiles() error {
+	if cmd.chi2CaseControlFile == "" {
+		return nil
+	}
+	infiles, err := allFiles(cmd.chi2CaseControlFile, nil)
+	if err != nil {
+		return err
+	}
+	// index in cmd.cgnames => case(true) / control(false)
+	cc := map[int]bool{}
+	for _, infile := range infiles {
+		f, err := open(infile)
+		if err != nil {
+			return err
+		}
+		buf, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		ccCol := -1
+		for _, tsv := range bytes.Split(buf, []byte{'\n'}) {
+			if len(tsv) == 0 {
+				continue
+			}
+			split := strings.Split(string(tsv), "\t")
+			if ccCol < 0 {
+				// header row
+				for col, name := range split {
+					if name == cmd.chi2CaseControlColumn {
+						ccCol = col
+						break
+					}
+				}
+				if ccCol < 0 {
+					return fmt.Errorf("%s: no column named %q in header row %q", infile, cmd.chi2CaseControlColumn, tsv)
+				}
+				continue
+			}
+			if len(split) <= ccCol {
+				continue
+			}
+			pattern := split[0]
+			found := -1
+			for i, name := range cmd.cgnames {
+				if strings.Contains(name, pattern) {
+					if found >= 0 {
+						log.Warnf("pattern %q in %s matches multiple genome IDs (%qs, %q)", pattern, infile, cmd.cgnames[found], name)
+					}
+					found = i
+				}
+			}
+			if found < 0 {
+				log.Warnf("pattern %q in %s does not match any genome IDs", pattern, infile)
+				continue
+			}
+			if split[ccCol] == "0" {
+				cc[found] = false
+			}
+			if split[ccCol] == "1" {
+				cc[found] = true
+			}
+		}
+	}
+	allnames := cmd.cgnames
+	cmd.cgnames = nil
+	cmd.chi2Cases = nil
+	ncases := 0
+	for i, name := range allnames {
+		if cc, ok := cc[i]; ok {
+			cmd.cgnames = append(cmd.cgnames, name)
+			cmd.chi2Cases = append(cmd.chi2Cases, cc)
+			if cc {
+				ncases++
+			}
+		}
+	}
+	log.Printf("%d cases, %d controls, %d neither (dropped)", ncases, len(cmd.cgnames)-ncases, len(allnames)-len(cmd.cgnames))
+	return nil
 }
 
 func (cmd *sliceNumpy) filterHGVScolpair(colpair [2][]int8) bool {

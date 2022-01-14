@@ -236,7 +236,7 @@ func (tilelib *tileLibrary) loadCompactSequences(cseqs []CompactSequence, varian
 	return nil
 }
 
-func allGobFiles(path string) ([]string, error) {
+func allFiles(path string, re *regexp.Regexp) ([]string, error) {
 	var files []string
 	f, err := open(path)
 	if err != nil {
@@ -251,21 +251,24 @@ func allGobFiles(path string) ([]string, error) {
 		if fi.Name() == "." || fi.Name() == ".." {
 			continue
 		} else if child := path + "/" + fi.Name(); fi.IsDir() {
-			add, err := allGobFiles(child)
+			add, err := allFiles(child, re)
 			if err != nil {
 				return nil, err
 			}
 			files = append(files, add...)
-		} else if strings.HasSuffix(child, ".gob") || strings.HasSuffix(child, ".gob.gz") {
+		} else if re == nil || re.MatchString(child) {
 			files = append(files, child)
 		}
 	}
+	sort.Strings(files)
 	return files, nil
 }
 
+var matchGobFile = regexp.MustCompile(`\.gob(\.gz)?$`)
+
 func (tilelib *tileLibrary) LoadDir(ctx context.Context, path string) error {
 	log.Infof("LoadDir: walk dir %s", path)
-	files, err := allGobFiles(path)
+	files, err := allFiles(path, matchGobFile)
 	if err != nil {
 		return err
 	}

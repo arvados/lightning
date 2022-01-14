@@ -214,13 +214,19 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 
 	c.Log("=== slice-numpy + chunked hgvs matrix ===")
 	{
-		err = ioutil.WriteFile(tmpdir+"/cases.txt", []byte("pipeline1/input1\npipeline1dup/input1\n"), 0600)
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+pipeline1/input1	1
+pipeline1/input2	0
+pipeline1dup/input1	1
+pipeline1dup/input2	0
+`), 0600)
 		c.Assert(err, check.IsNil)
 		npydir := c.MkDir()
 		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-hgvs-matrix=true",
-			"-chi2-cases-file=" + tmpdir + "/cases.txt",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
 			"-chi2-p-value=0.05",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -240,13 +246,19 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 
 	c.Log("=== slice-numpy + onehot ===")
 	{
-		err = ioutil.WriteFile(tmpdir+"/cases.txt", []byte("pipeline1/input1\npipeline1dup/input1\n"), 0600)
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+pipeline1/input1	1
+pipeline1/input2	0
+pipeline1dup/input1	1
+pipeline1dup/input2	0
+`), 0600)
 		c.Assert(err, check.IsNil)
 		npydir := c.MkDir()
 		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-onehot=true",
-			"-chi2-cases-file=" + tmpdir + "/cases.txt",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
 			"-chi2-p-value=0.05",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,

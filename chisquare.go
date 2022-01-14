@@ -32,6 +32,9 @@ func pvalue(a, b []bool) float64 {
 		for bi := 0; bi < 2; bi++ {
 			rowtotal := tab[ai*2] + tab[ai*2+1]
 			coltotal := tab[bi] + tab[2+bi]
+			if rowtotal == 0 || coltotal == 0 {
+				return 1
+			}
 			exp := float64(rowtotal) * float64(coltotal) / float64(len(a))
 			obs := tab[ai*2+bi]
 			d := float64(obs) - exp
