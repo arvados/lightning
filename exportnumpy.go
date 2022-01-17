@@ -411,7 +411,7 @@ func makeMask(regionsFilename string, expandRegions int) (*mask, error) {
 		return nil, err
 	}
 	defer rfile.Close()
-	regions, err := ioutil.ReadAll(rfile)
+	regions, err := io.ReadAll(rfile)
 	if err != nil {
 		return nil, err
 	}

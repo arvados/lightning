@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -118,10 +117,16 @@ func (cmd *anno2vcf) RunCommand(prog string, args []string, stdin io.Reader, std
 		filename := *inputDir + "/" + fi.Name()
 		thr.Go(func() error {
 			log.Printf("reading %s", filename)
-			buf, err := ioutil.ReadFile(filename)
+			f, err := open(filename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			buf, err := io.ReadAll(f)
 			if err != nil {
 				return fmt.Errorf("%s: %s", filename, err)
 			}
+			f.Close()
 			lines := bytes.Split(buf, []byte{'\n'})
 			calls := map[string][]*call{}
 			for lineIdx, line := range lines {

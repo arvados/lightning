@@ -475,7 +475,7 @@ func (cmd *vcf2fasta) loadRegionsPy() error {
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("get %q: http status %d", cmd.gvcfRegionsPy, resp.StatusCode)
 		}
-		buf, err := ioutil.ReadAll(resp.Body)
+		buf, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("get %q: read body: %s", cmd.gvcfRegionsPy, err)
 		}
