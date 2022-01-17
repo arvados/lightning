@@ -244,7 +244,7 @@ pipeline1dup/input2	0
 `)
 	}
 
-	c.Log("=== slice-numpy + onehot ===")
+	c.Log("=== slice-numpy + onehotChunked ===")
 	{
 		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
 pipeline1/input1	1
@@ -284,6 +284,50 @@ pipeline1dup/input2	0
 				0, 1, 0, 0, 0, 1, // input2
 				0, 0, 0, 1, 0, 0, // dup/input1
 				0, 1, 0, 0, 0, 1, // dup/input2
+			})
+		}
+	}
+
+	c.Log("=== slice-numpy + onehotSingle ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+pipeline1/input1	1
+pipeline1/input2	0
+pipeline1dup/input1	1
+pipeline1dup/input2	0
+`), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-single-onehot=true",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
+			"-chi2-p-value=0.05",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/onehot.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{4, 16})
+		onehot, err := npy.GetInt8()
+		if c.Check(err, check.IsNil) {
+			for r := 0; r < npy.Shape[0]; r++ {
+				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
+			}
+			c.Check(onehot, check.DeepEquals, []int8{
+				0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, // input1
+				0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, // input2
+				0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, // dup/input1
+				0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, // dup/input2
 			})
 		}
 	}

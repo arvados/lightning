@@ -63,7 +63,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	mergeOutput := flags.Bool("merge-output", false, "merge output into one matrix.npy and one matrix.annotations.csv")
 	hgvsSingle := flags.Bool("single-hgvs-matrix", false, "also generate hgvs-based matrix")
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
-	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix")
+	onehotSingle := flags.Bool("single-onehot", false, "generate one-hot tile-based matrix")
+	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
 	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
@@ -113,6 +114,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-merge-output=" + fmt.Sprintf("%v", *mergeOutput),
 			"-single-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsSingle),
 			"-chunked-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsChunked),
+			"-single-onehot=" + fmt.Sprintf("%v", *onehotSingle),
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
 			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
 			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
@@ -314,6 +316,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	if *mergeOutput || *hgvsSingle {
 		toMerge = make([][]int16, len(infiles))
 	}
+	var onehotChunks [][][]int8
+	var onehotXrefs [][]onehotXref
+	if *onehotSingle {
+		onehotChunks = make([][][]int8, len(infiles))
+		onehotXrefs = make([][]onehotXref, len(infiles))
+	}
 
 	throttleMem := throttle{Max: cmd.threads} // TODO: estimate using mem and data size
 	throttleNumpyMem := throttle{Max: cmd.threads/2 + 1}
@@ -435,7 +443,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			throttleCPU.Wait()
 
 			var onehotChunk [][]int8
-			var onehotXrefs []onehotXref
+			var onehotXref []onehotXref
 
 			annotationsFilename := fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, infileIdx)
 			log.Infof("%04d: writing %s", infileIdx, annotationsFilename)
@@ -465,10 +473,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						maxv = v
 					}
 				}
-				if *onehotChunked {
+				if *onehotChunked || *onehotSingle {
 					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart)
 					onehotChunk = append(onehotChunk, onehot...)
-					onehotXrefs = append(onehotXrefs, xrefs...)
+					onehotXref = append(onehotXref, xrefs...)
 				}
 				fmt.Fprintf(annow, "%d,%d,%d,=,%s,%d,,,\n", tag, outcol, rt.variant, rt.seqname, rt.pos)
 				variants := seq[tag]
@@ -570,43 +578,27 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				// transpose onehotChunk[col][row] to numpy[row*ncols+col]
 				rows := len(cmd.cgnames)
 				cols := len(onehotChunk)
-				log.Infof("%04d: preparing onehot numpy (rows=%d, cols=%d, mem=%d)", infileIdx, rows, cols, rows*cols)
+				log.Infof("%04d: preparing onehot numpy (rows=%d, cols=%d, mem=%d)", infileIdx, len(cmd.cgnames), len(onehotChunk), len(cmd.cgnames)*len(onehotChunk))
 				throttleNumpyMem.Acquire()
-				out := make([]int8, rows*cols)
-				for row := range cmd.cgnames {
-					out := out[row*cols:]
-					for colnum, values := range onehotChunk {
-						out[colnum] = values[row]
-					}
-				}
-				seq = nil
-				cgs = nil
-				debug.FreeOSMemory()
-				throttleNumpyMem.Release()
-
+				out := onehotcols2int8(onehotChunk)
 				fnm := fmt.Sprintf("%s/onehot.%04d.npy", *outputDir, infileIdx)
 				err = writeNumpyInt8(fnm, out, rows, cols)
 				if err != nil {
 					return err
 				}
-
 				fnm = fmt.Sprintf("%s/onehot-columns.%04d.npy", *outputDir, infileIdx)
-				xcols := len(onehotXrefs)
-				xdata := make([]int32, 4*xcols)
-				for i, xref := range onehotXrefs {
-					xdata[i] = int32(xref.tag)
-					xdata[xcols+i] = int32(xref.variant)
-					if xref.het {
-						xdata[xcols*2+i] = 1
-					}
-					xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
-				}
-				err = writeNumpyInt32(fnm, xdata, 4, xcols)
+				err = writeNumpyInt32(fnm, onehotXref2int32(onehotXref), 4, len(onehotXref))
 				if err != nil {
 					return err
 				}
+				debug.FreeOSMemory()
+				throttleNumpyMem.Release()
 			}
-			if !*onehotChunked || *mergeOutput || *hgvsSingle {
+			if *onehotSingle {
+				onehotChunks[infileIdx] = onehotChunk
+				onehotXrefs[infileIdx] = onehotXref
+			}
+			if !(*onehotSingle || *onehotChunked) || *mergeOutput || *hgvsSingle {
 				log.Infof("%04d: preparing numpy", infileIdx)
 				throttleNumpyMem.Acquire()
 				rows := len(cmd.cgnames)
@@ -636,7 +628,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					log.Infof("%04d: matrix fragment %d rows x %d cols", infileIdx, rows, cols)
 					toMerge[infileIdx] = out
 				}
-				if !*mergeOutput && !*onehotChunked {
+				if !*mergeOutput && !*onehotChunked && !*onehotSingle {
 					fnm := fmt.Sprintf("%s/matrix.%04d.npy", *outputDir, infileIdx)
 					err = writeNumpyInt16(fnm, out, rows, cols)
 					if err != nil {
@@ -891,6 +883,26 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			if err != nil {
 				return 1
 			}
+		}
+	}
+	if *onehotSingle {
+		var onehot [][]int8
+		var xrefs []onehotXref
+		for i := range onehotChunks {
+			onehot = append(onehot, onehotChunks[i]...)
+			onehotChunks[i] = nil
+			xrefs = append(xrefs, onehotXrefs[i]...)
+			onehotXrefs[i] = nil
+		}
+		fnm := fmt.Sprintf("%s/onehot.npy", *outputDir)
+		err = writeNumpyInt8(fnm, onehotcols2int8(onehot), len(cmd.cgnames), len(onehot))
+		if err != nil {
+			return 1
+		}
+		fnm = fmt.Sprintf("%s/onehot-columns.npy", *outputDir)
+		err = writeNumpyInt32(fnm, onehotXref2int32(xrefs), 4, len(xrefs))
+		if err != nil {
+			return 1
 		}
 	}
 	return 0
@@ -1164,6 +1176,44 @@ func bool2int8(in []bool) []int8 {
 	for i, v := range in {
 		if v {
 			out[i] = 1
+		}
+	}
+	return out
+}
+
+// convert a []onehotXref with length N to a numpy-style []int32
+// matrix with N columns, one row per field of onehotXref struct.
+//
+// Hom/het row contains hom=0, het=1.
+//
+// P-value row contains 1000000x actual p-value.
+func onehotXref2int32(xrefs []onehotXref) []int32 {
+	xcols := len(xrefs)
+	xdata := make([]int32, 4*xcols)
+	for i, xref := range xrefs {
+		xdata[i] = int32(xref.tag)
+		xdata[xcols+i] = int32(xref.variant)
+		if xref.het {
+			xdata[xcols*2+i] = 1
+		}
+		xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
+	}
+	return xdata
+}
+
+// transpose onehot data from in[col][row] to numpy-style
+// out[row*cols+col].
+func onehotcols2int8(in [][]int8) []int8 {
+	if len(in) == 0 {
+		return nil
+	}
+	cols := len(in)
+	rows := len(in[0])
+	out := make([]int8, rows*cols)
+	for row := 0; row < rows; row++ {
+		outrow := out[row*cols:]
+		for col, incol := range in {
+			outrow[col] = incol[row]
 		}
 	}
 	return out
