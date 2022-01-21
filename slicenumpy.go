@@ -1007,7 +1007,7 @@ func (cmd *sliceNumpy) filterHGVScolpair(colpair [2][]int8) bool {
 		cases = append(cases, c)
 	}
 	return len(cases) >= cmd.minCoverage &&
-		(pvalue(cases, col0) <= cmd.chi2PValue || pvalue(cases, col1) <= cmd.chi2PValue)
+		(pvalue(col0, cases) <= cmd.chi2PValue || pvalue(col1, cases) <= cmd.chi2PValue)
 }
 
 func writeNumpyInt32(fnm string, out []int32, rows, cols int) error {
@@ -1152,8 +1152,8 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	var xref []onehotXref
 	for homcol := 4; homcol < len(obs); homcol += 2 {
 		p := [2]float64{
-			pvalue(cmd.chi2Cases, obs[homcol]),
-			pvalue(cmd.chi2Cases, obs[homcol+1]),
+			pvalue(obs[homcol], cmd.chi2Cases),
+			pvalue(obs[homcol+1], cmd.chi2Cases),
 		}
 		if cmd.chi2PValue < 1 && !(p[0] < cmd.chi2PValue || p[1] < cmd.chi2PValue) {
 			continue
