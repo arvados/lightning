@@ -596,9 +596,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				throttleNumpyMem.Release()
 			}
 			if *onehotSingle {
-				log.Infof("%04d: keeping onehot chunk in memory (rows=%d, cols=%d, mem=%d)", infileIdx, len(cmd.cgnames), len(onehotChunk), (len(cmd.cgnames)+int(onehotXrefSize))*len(onehotChunk))
 				onehotIndirect[infileIdx] = onehotChunk2Indirect(onehotChunk)
 				onehotXrefs[infileIdx] = onehotXref
+				n := len(onehotIndirect[infileIdx][0])
+				log.Infof("%04d: keeping onehot coordinates in memory (n=%d, mem=%d)", infileIdx, n, n*8)
 			}
 			if !(*onehotSingle || *onehotChunked) || *mergeOutput || *hgvsSingle {
 				log.Infof("%04d: preparing numpy", infileIdx)
