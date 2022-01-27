@@ -317,17 +317,15 @@ pipeline1dup/input2	0
 		defer f.Close()
 		npy, err := gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{4, 16})
-		onehot, err := npy.GetInt8()
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 16})
+		onehot, err := npy.GetUint32()
 		if c.Check(err, check.IsNil) {
 			for r := 0; r < npy.Shape[0]; r++ {
 				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
 			}
-			c.Check(onehot, check.DeepEquals, []int8{
-				0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, // input1
-				0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, // input2
-				0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, // dup/input1
-				0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, // dup/input2
+			c.Check(onehot, check.DeepEquals, []uint32{
+				0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 0, 2,
+				1, 1, 2, 2, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15,
 			})
 		}
 	}
