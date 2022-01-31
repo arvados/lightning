@@ -81,6 +81,24 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 	out, _ := exec.Command("find", slicedir, "-ls").CombinedOutput()
 	c.Logf("%s", out)
 
+	c.Log("=== dump ===")
+	{
+		dumpdir := c.MkDir()
+		exited = (&dump{}).RunCommand("dump", []string{
+			"-local=true",
+			"-tags=4,6,7",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + dumpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", dumpdir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+		dumped, err := ioutil.ReadFile(dumpdir + "/variants.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", dumped)
+		c.Check(string(dumped), check.Matches, `(?ms).*\n6,1,1,chr2,349,AAAACTG.*`)
+	}
+
 	c.Log("=== slice-numpy ===")
 	{
 		npydir := c.MkDir()

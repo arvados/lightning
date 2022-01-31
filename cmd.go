@@ -43,6 +43,7 @@ var (
 		"diff-fasta":         &diffFasta{},
 		"stats":              &statscmd{},
 		"merge":              &merger{},
+		"dump":               &dump{},
 		"dumpgob":            &dumpGob{},
 	})
 )
