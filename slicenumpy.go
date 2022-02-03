@@ -155,10 +155,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	}
 
 	cmd.cgnames = nil
-	taglen := -1
+	var tagset [][]byte
 	DecodeLibrary(in0, strings.HasSuffix(infiles[0], ".gz"), func(ent *LibraryEntry) error {
 		if len(ent.TagSet) > 0 {
-			taglen = len(ent.TagSet[0])
+			tagset = ent.TagSet
 		}
 		for _, cseq := range ent.CompactSequences {
 			if cseq.Name == *ref || *ref == "" {
@@ -185,10 +185,18 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		err = fmt.Errorf("%s: reference sequence not found", infiles[0])
 		return 1
 	}
-	if taglen < 0 {
+	if len(tagset) == 0 {
 		err = fmt.Errorf("tagset not found")
 		return 1
 	}
+
+	taglib := &tagLibrary{}
+	err = taglib.setTags(tagset)
+	if err != nil {
+		return 1
+	}
+	taglen := taglib.TagLen()
+
 	if len(cmd.cgnames) == 0 {
 		err = fmt.Errorf("no genomes found matching regexp %q", cmd.filter.MatchGenome)
 		return 1
@@ -244,6 +252,20 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				err = fmt.Errorf("missing tiledata for tag %d variant %d in %s in ref", libref.Tag, libref.Variant, seqname)
 				return 1
 			}
+			foundthistag := false
+			taglib.FindAll(tiledata[:len(tiledata)-1], func(tagid tagID, offset, _ int) {
+				if !foundthistag && tagid == libref.Tag {
+					foundthistag = true
+					return
+				}
+				if dupref, ok := reftile[tagid]; ok {
+					log.Printf("dropping reference tile %+v, tag not unique, also found inside %+v from %s @ %d", dupref, libref, seqname, pos+offset+1)
+					delete(reftile, tagid)
+				} else {
+					log.Printf("found tag %d at offset %d inside tile variant %+v on %s @ %d", tagid, offset, libref, seqname, pos+offset+1)
+				}
+				isdup[tagid] = true
+			})
 			if isdup[libref.Tag] {
 				log.Printf("dropping reference tile %+v from %s @ %d, tag not unique", libref, seqname, pos)
 			} else if reftile[libref.Tag] != nil {
