@@ -259,7 +259,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					return
 				}
 				if dupref, ok := reftile[tagid]; ok {
-					log.Printf("dropping reference tile %+v, tag not unique, also found inside %+v from %s @ %d", dupref, libref, seqname, pos+offset+1)
+					log.Printf("dropping reference tile %+v from %s @ %d, tag not unique, also found inside %+v from %s @ %d", tileLibRef{Tag: tagid, Variant: dupref.variant}, dupref.seqname, dupref.pos, libref, seqname, pos+offset+1)
 					delete(reftile, tagid)
 				} else {
 					log.Printf("found tag %d at offset %d inside tile variant %+v on %s @ %d", tagid, offset, libref, seqname, pos+offset+1)
