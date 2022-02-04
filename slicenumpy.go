@@ -1217,20 +1217,17 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	var onehot [][]int8
 	var xref []onehotXref
 	for homcol := 4; homcol < len(obs); homcol += 2 {
-		p := [2]float64{
-			pvalue(obs[homcol], cmd.chi2Cases),
-			pvalue(obs[homcol+1], cmd.chi2Cases),
-		}
-		if cmd.chi2PValue < 1 && !(p[0] < cmd.chi2PValue || p[1] < cmd.chi2PValue) {
-			continue
-		}
 		for het := 0; het < 2; het++ {
+			p := pvalue(obs[homcol+het], cmd.chi2Cases)
+			if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
+				continue
+			}
 			onehot = append(onehot, bool2int8(obs[homcol+het]))
 			xref = append(xref, onehotXref{
 				tag:     tag,
 				variant: tileVariantID(homcol / 2),
 				het:     het == 1,
-				pvalue:  p[het],
+				pvalue:  p,
 			})
 		}
 	}
