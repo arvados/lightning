@@ -96,7 +96,7 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 		dumped, err := ioutil.ReadFile(dumpdir + "/variants.csv")
 		c.Assert(err, check.IsNil)
 		c.Logf("%s", dumped)
-		c.Check(string(dumped), check.Matches, `(?ms).*\n6,1,1,chr2,349,AAAACTG.*`)
+		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n6,1,1,chr2,349,AAAACTG.*`)
 	}
 
 	c.Log("=== slice-numpy ===")

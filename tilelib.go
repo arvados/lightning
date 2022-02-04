@@ -544,12 +544,13 @@ func (tilelib *tileLibrary) dump(out io.Writer) {
 }
 
 type importStats struct {
-	InputFile              string
-	InputLabel             string
-	InputLength            int
-	InputCoverage          int
-	PathLength             int
-	DroppedOutOfOrderTiles int
+	InputFile             string
+	InputLabel            string
+	InputLength           int
+	InputCoverage         int
+	PathLength            int
+	DroppedRepeatedTags   int
+	DroppedOutOfOrderTags int
 }
 
 func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChromosome *regexp.Regexp, isRef bool) (tileSeq, []importStats, error) {
@@ -606,8 +607,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 			log.Warnf("%s %s no tags found", filelabel, job.label)
 		}
 
-		skipped := 0
-
+		droppedDup := 0
 		if !tilelib.useDups {
 			// Remove any tags that appeared more than once
 			dup := map[tagID]bool{}
@@ -621,17 +621,19 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 					dst++
 				}
 			}
-			skipped += len(found) - dst
+			droppedDup = len(found) - dst
+			log.Infof("%s %s dropping %d non-unique tags", filelabel, job.label, droppedDup)
 			found = found[:dst]
 		}
 
+		droppedOOO := 0
 		if tilelib.skipOOO {
-			log.Infof("%s %s keeping longest increasing subsequence", filelabel, job.label)
 			keep := longestIncreasingSubsequence(len(found), func(i int) int { return int(found[i].tagid) })
 			for i, x := range keep {
 				found[i] = found[x]
 			}
-			skipped += len(found) - len(keep)
+			droppedOOO = len(found) - len(keep)
+			log.Infof("%s %s dropping %d out-of-order tags", filelabel, job.label, droppedOOO)
 			found = found[:len(keep)]
 		}
 
@@ -670,14 +672,15 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		ret[job.label] = pathcopy
 
 		basesIn := countBases(job.fasta)
-		log.Infof("%s %s fasta in %d coverage in %d path len %d low-quality %d skipped-out-of-order %d", filelabel, job.label, len(job.fasta), basesIn, len(path), lowquality, skipped)
+		log.Infof("%s %s fasta in %d coverage in %d path len %d low-quality %d", filelabel, job.label, len(job.fasta), basesIn, len(path), lowquality)
 		stats = append(stats, importStats{
-			InputFile:              filelabel,
-			InputLabel:             job.label,
-			InputLength:            len(job.fasta),
-			InputCoverage:          basesIn,
-			PathLength:             len(path),
-			DroppedOutOfOrderTiles: skipped,
+			InputFile:             filelabel,
+			InputLabel:            job.label,
+			InputLength:           len(job.fasta),
+			InputCoverage:         basesIn,
+			PathLength:            len(path),
+			DroppedOutOfOrderTags: droppedOOO,
+			DroppedRepeatedTags:   droppedDup,
 		})
 
 		totalPathLen += len(path)
