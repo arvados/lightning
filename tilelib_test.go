@@ -100,7 +100,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}}})
 
 	// tags appear in seq: 0, 1, 1, 2 -> skip second tag1
-	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
+	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true, useDups: true}
 	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+
@@ -114,7 +114,7 @@ func (s *tilelibSuite) TestSkipOOO(c *check.C) {
 	c.Check(tseq, check.DeepEquals, tileSeq{"test-seq": []tileLibRef{{0, 1}, {1, 1}, {2, 1}}})
 
 	// tags appear in seq: 0, 1, 3, 0, 4 -> skip second tag0
-	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true}
+	tilelib = &tileLibrary{taglib: &s.taglib, skipOOO: true, useDups: true}
 	tseq, _, err = tilelib.TileFasta("test-label", bytes.NewBufferString(">test-seq\n"+
 		s.tag[0]+
 		"cccccccccccccccccccc\n"+

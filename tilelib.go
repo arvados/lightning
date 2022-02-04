@@ -61,6 +61,7 @@ type tileLibrary struct {
 	retainNoCalls       bool
 	skipOOO             bool
 	retainTileSequences bool
+	useDups             bool
 
 	taglib         *tagLibrary
 	variant        [][][blake2b.Size256]byte
@@ -606,13 +607,31 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		}
 
 		skipped := 0
+
+		if !tilelib.useDups {
+			// Remove any tags that appeared more than once
+			dup := map[tagID]bool{}
+			for _, ft := range found {
+				_, dup[ft.tagid] = dup[ft.tagid]
+			}
+			dst := 0
+			for _, ft := range found {
+				if !dup[ft.tagid] {
+					found[dst] = ft
+					dst++
+				}
+			}
+			skipped += len(found) - dst
+			found = found[:dst]
+		}
+
 		if tilelib.skipOOO {
 			log.Infof("%s %s keeping longest increasing subsequence", filelabel, job.label)
 			keep := longestIncreasingSubsequence(len(found), func(i int) int { return int(found[i].tagid) })
 			for i, x := range keep {
 				found[i] = found[x]
 			}
-			skipped = len(found) - len(keep)
+			skipped += len(found) - len(keep)
 			found = found[:len(keep)]
 		}
 
