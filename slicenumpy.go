@@ -247,6 +247,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	for seqname, cseq := range refseq {
 		pos := 0
 		for _, libref := range cseq {
+			if libref.Tag > tagID(cmd.filter.MaxTag) {
+				continue
+			}
 			tiledata := reftiledata[libref]
 			if len(tiledata) == 0 {
 				err = fmt.Errorf("missing tiledata for tag %d variant %d in %s in ref", libref.Tag, libref.Variant, seqname)
