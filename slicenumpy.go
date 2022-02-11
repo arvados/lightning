@@ -480,16 +480,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			annow := bufio.NewWriterSize(annof, 1<<20)
 			outcol := 0
 			for tag := tagstart; tag < tagend; tag++ {
-				rt, ok := reftile[tag]
-				if !ok {
-					if mask == nil {
-						outcol++
-					}
-					// Excluded by specified
-					// regions, or reference does
-					// not use any variant of this
-					// tile. (TODO: log this?
-					// mention it in annotations?)
+				rt := reftile[tag]
+				if rt == nil && mask != nil {
+					// Excluded by specified regions
+					continue
+				}
+				if tag > tagID(cmd.filter.MaxTag) {
 					continue
 				}
 				remap := variantRemap[tag-tagstart]
@@ -503,6 +499,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart)
 					onehotChunk = append(onehotChunk, onehot...)
 					onehotXref = append(onehotXref, xrefs...)
+				}
+				if rt == nil {
+					// Reference does not use any
+					// variant of this tile
+					outcol++
+					continue
 				}
 				fmt.Fprintf(annow, "%d,%d,%d,=,%s,%d,,,\n", tag, outcol, rt.variant, rt.seqname, rt.pos)
 				variants := seq[tag]
