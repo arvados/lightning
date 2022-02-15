@@ -41,6 +41,7 @@ type sliceNumpy struct {
 	chi2PValue            float64
 	minCoverage           int
 	cgnames               []string
+	includeVariant1       bool
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -70,6 +71,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
 	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
+	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -1221,7 +1223,13 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	var onehot [][]int8
 	var xref []onehotXref
-	for homcol := 4; homcol < len(obs); homcol += 2 {
+	for homcol := 2; homcol < len(obs); homcol += 2 {
+		// homcol 0,1 correspond to tile variant 0, i.e.,
+		// no-call; homcol 2,3 correspond to the most common
+		// variant; so we (normally) start at homcol 4.
+		if homcol < 4 && !cmd.includeVariant1 {
+			continue
+		}
 		for het := 0; het < 2; het++ {
 			p := pvalue(obs[homcol+het], cmd.chi2Cases)
 			if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
