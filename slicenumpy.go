@@ -345,9 +345,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		toMerge = make([][]int16, len(infiles))
 	}
 	var onehotIndirect [][2][]uint32 // [chunkIndex][axis][index]
+	var onehotChunkSize []uint32
 	var onehotXrefs [][]onehotXref
 	if *onehotSingle {
 		onehotIndirect = make([][2][]uint32, len(infiles))
+		onehotChunkSize = make([]uint32, len(infiles))
 		onehotXrefs = make([][]onehotXref, len(infiles))
 	}
 
@@ -626,12 +628,13 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			}
 			if *onehotSingle {
 				onehotIndirect[infileIdx] = onehotChunk2Indirect(onehotChunk)
+				onehotChunkSize[infileIdx] = uint32(len(onehotChunk))
 				onehotXrefs[infileIdx] = onehotXref
 				n := len(onehotIndirect[infileIdx][0])
-				log.Infof("%04d: keeping onehot coordinates in memory (n=%d, mem=%d)", infileIdx, n, n*8)
+				log.Infof("%04d: keeping onehot coordinates in memory (n=%d, mem=%d)", infileIdx, n, n*8*2)
 			}
 			if !(*onehotSingle || *onehotChunked) || *mergeOutput || *hgvsSingle {
-				log.Infof("%04d: preparing numpy", infileIdx)
+				log.Infof("%04d: preparing numpy (rows=%d, cols=%d)", infileIdx, len(cmd.cgnames), 2*outcol)
 				throttleNumpyMem.Acquire()
 				rows := len(cmd.cgnames)
 				cols := 2 * outcol
@@ -924,15 +927,18 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		onehot := make([]uint32, nzCount*2) // [r,r,r,...,c,c,c,...]
 		var xrefs []onehotXref
+		chunkOffset := uint32(0)
 		outcol := 0
 		for i, part := range onehotIndirect {
 			for i := range part[1] {
-				part[1][i] += uint32(outcol)
+				part[1][i] += chunkOffset
 			}
 			copy(onehot[outcol:], part[0])
 			copy(onehot[outcol+nzCount:], part[1])
-			outcol += len(part[0])
 			xrefs = append(xrefs, onehotXrefs[i]...)
+
+			outcol += len(part[0])
+			chunkOffset += onehotChunkSize[i]
 
 			part[0] = nil
 			part[1] = nil
