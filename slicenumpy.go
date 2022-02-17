@@ -249,7 +249,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	for seqname, cseq := range refseq {
 		pos := 0
 		for _, libref := range cseq {
-			if libref.Tag > tagID(cmd.filter.MaxTag) {
+			if cmd.filter.MaxTag >= 0 && libref.Tag > tagID(cmd.filter.MaxTag) {
 				continue
 			}
 			tiledata := reftiledata[libref]
@@ -487,7 +487,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					// Excluded by specified regions
 					continue
 				}
-				if tag > tagID(cmd.filter.MaxTag) {
+				if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
 					continue
 				}
 				remap := variantRemap[tag-tagstart]
@@ -641,7 +641,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					outcol := 0
 					for col, v := range cgs[name].Variants {
 						tag := tagstart + tagID(col/2)
-						if mask != nil && reftile[tag] == nil {
+						if mask != nil && reftile[tag] == nil || tag > tagID(cmd.filter.MaxTag) {
 							continue
 						}
 						if variants, ok := seq[tag]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
