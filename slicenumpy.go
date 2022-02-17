@@ -644,7 +644,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					outcol := 0
 					for col, v := range cgs[name].Variants {
 						tag := tagstart + tagID(col/2)
-						if mask != nil && reftile[tag] == nil || tag > tagID(cmd.filter.MaxTag) {
+						if mask != nil && reftile[tag] == nil || (cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag)) {
 							continue
 						}
 						if variants, ok := seq[tag]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
