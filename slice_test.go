@@ -215,7 +215,12 @@ func (s *sliceSuite) TestImportAndSlice(c *check.C) {
 		c.Check(npy.Shape, check.DeepEquals, []int{4, 4})
 		variants, err := npy.GetInt16()
 		if c.Check(err, check.IsNil) {
-			c.Check(variants, check.DeepEquals, []int16{2, 1, 3, 1, -1, -1, 4, 2, 2, 1, 3, 1, -1, -1, 4, 2})
+			c.Check(variants, check.DeepEquals, []int16{
+				2, 1, 3, 1,
+				-1, -1, 4, 2,
+				2, 1, 3, 1,
+				-1, -1, 4, 2,
+			})
 		}
 
 		annotations, err := ioutil.ReadFile(npydir + "/matrix.annotations.csv")
@@ -325,6 +330,7 @@ pipeline1dup/input2	0
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
 			"-output-dir=" + npydir,
+			"-debug-tag=1",
 		}, nil, os.Stderr, os.Stderr)
 		c.Check(exited, check.Equals, 0)
 		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
@@ -345,6 +351,54 @@ pipeline1dup/input2	0
 				0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 0, 2,
 				0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7,
 			})
+		}
+	}
+}
+
+func (s *sliceSuite) Test_tv2homhet(c *check.C) {
+	cmd := &sliceNumpy{
+		cgnames:         []string{"sample1", "sample2", "sample3", "sample4"},
+		chi2Cases:       []bool{false, true, true, false},
+		chi2PValue:      .5,
+		includeVariant1: true,
+	}
+	cgs := map[string]CompactGenome{
+		"sample1": CompactGenome{
+			Variants: []tileVariantID{0, 0, 1, 1}, // hom tv=1
+		},
+		"sample2": CompactGenome{
+			Variants: []tileVariantID{0, 0, 5, 5}, // hom tv=2
+		},
+		"sample3": CompactGenome{
+			Variants: []tileVariantID{0, 0, 5, 1}, // het tv=1, tv=2
+		},
+		"sample4": CompactGenome{
+			Variants: []tileVariantID{0, 0, 9, 9}, // hom tv=3
+		},
+	}
+	maxv := tileVariantID(3)
+	remap := []tileVariantID{0, 1, 0, 0, 0, 2, 0, 0, 0, 3}
+	chunkstarttag := tagID(10)
+	for tag := tagID(10); tag < 12; tag++ {
+		c.Logf("=== tag %d", tag)
+		chunk, xref := cmd.tv2homhet(cgs, maxv, remap, tag, chunkstarttag)
+		c.Logf("chunk len=%d", len(chunk))
+		for _, x := range chunk {
+			c.Logf("%+v", x)
+		}
+		c.Logf("xref len=%d", len(xref))
+		for _, x := range xref {
+			c.Logf("%+v", x)
+		}
+		out := onehotcols2int8(chunk)
+		c.Logf("onehotcols2int8(chunk) len=%d", len(out))
+		for i := 0; i < len(out); i += len(chunk) {
+			c.Logf("%+v", out[i:i+len(chunk)])
+		}
+		coords := onehotChunk2Indirect(chunk)
+		c.Logf("onehotChunk2Indirect(chunk) len=%d", len(coords))
+		for _, x := range coords {
+			c.Logf("%+v", x)
 		}
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"git.arvados.org/arvados.git/sdk/go/arvados"
 	"github.com/arvados/lightning/hgvs"
 	"github.com/kshedden/gonpy"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 )
@@ -42,6 +43,7 @@ type sliceNumpy struct {
 	minCoverage           int
 	cgnames               []string
 	includeVariant1       bool
+	debugTag              tagID
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -67,6 +69,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
 	onehotSingle := flags.Bool("single-onehot", false, "generate one-hot tile-based matrix")
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
+	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
 	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
@@ -91,6 +94,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		log.Errorf("cannot use provided -chi2-p-value=%f because -chi2-case-control-file= or -chi2-case-control-column= value is empty", cmd.chi2PValue)
 		return 2
 	}
+
+	cmd.debugTag = tagID(*debugTag)
 
 	if !*runlocal {
 		runner := arvadosContainerRunner{
@@ -123,6 +128,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
+			"-debug-tag=" + fmt.Sprintf("%d", cmd.debugTag),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
@@ -380,6 +386,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						// masked-out tiles.
 						continue
 					}
+					if tv.Tag == cmd.debugTag {
+						log.Printf("infile %d %s tag %d variant %d hash %x", infileIdx, infile, tv.Tag, tv.Variant, tv.Blake2b[:3])
+					}
 					variants := seq[tv.Tag]
 					if len(variants) == 0 {
 						variants = make([]TileVariant, 100)
@@ -427,12 +436,15 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						count[blake2b.Sum256(rt.tiledata)] = 0
 					}
 
-					for _, cg := range cgs {
+					for cgname, cg := range cgs {
 						idx := int(tag-tagstart) * 2
 						for allele := 0; allele < 2; allele++ {
 							v := cg.Variants[idx+allele]
 							if v > 0 && len(variants[v].Sequence) > 0 {
 								count[variants[v].Blake2b]++
+								if tag == cmd.debugTag {
+									log.Printf("tag %d cg %s allele %d tv %d hash %x count is now %d", tag, cgname, allele, v, variants[v].Blake2b[:3], count[variants[v].Blake2b])
+								}
 							}
 						}
 					}
@@ -458,6 +470,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					for i, h := range hash {
 						rank[h] = tileVariantID(i + 1)
 					}
+					if tag == cmd.debugTag {
+						for h, r := range rank {
+							log.Printf("tag %d rank(%x) = %v", tag, h[:3], r)
+						}
+					}
 					// remap[v] will be the new
 					// variant number for original
 					// variant number v.
@@ -465,9 +482,16 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					for i, tv := range variants {
 						remap[i] = rank[tv.Blake2b]
 					}
+					if tag == cmd.debugTag {
+						log.Printf("tag %d remap %+v", tag, remap)
+					}
 					variantRemap[tag-tagstart] = remap
 					if rt != nil {
-						rt.variant = rank[blake2b.Sum256(rt.tiledata)]
+						refrank := rank[blake2b.Sum256(rt.tiledata)]
+						if tag == cmd.debugTag {
+							log.Printf("tag %d reftile variant %d => %d", tag, rt.variant, refrank)
+						}
+						rt.variant = refrank
 					}
 				}()
 			}
@@ -501,7 +525,18 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					}
 				}
 				if *onehotChunked || *onehotSingle {
+					if tag == cmd.debugTag {
+						log.WithFields(logrus.Fields{
+							"cgs[2].Variants[tag*2:(tag+1)*2]": cgs[cmd.cgnames[2]].Variants[(tag-tagstart)*2 : (tag-tagstart+1)*2],
+						}).Info("before tv2homhet")
+					}
 					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart)
+					if tag == cmd.debugTag {
+						log.WithFields(logrus.Fields{
+							"onehot": onehot,
+							"xrefs":  xrefs,
+						}).Info("tv2homhet()")
+					}
 					onehotChunk = append(onehotChunk, onehot...)
 					onehotXref = append(onehotXref, xrefs...)
 				}
@@ -611,7 +646,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				// transpose onehotChunk[col][row] to numpy[row*ncols+col]
 				rows := len(cmd.cgnames)
 				cols := len(onehotChunk)
-				log.Infof("%04d: preparing onehot numpy (rows=%d, cols=%d, mem=%d)", infileIdx, len(cmd.cgnames), len(onehotChunk), len(cmd.cgnames)*len(onehotChunk))
+				log.Infof("%04d: preparing onehot numpy (rows=%d, cols=%d, mem=%d)", infileIdx, rows, cols, rows*cols)
 				throttleNumpyMem.Acquire()
 				out := onehotcols2int8(onehotChunk)
 				fnm := fmt.Sprintf("%s/onehot.%04d.npy", *outputDir, infileIdx)
@@ -1200,6 +1235,19 @@ const onehotXrefSize = unsafe.Sizeof(onehotXref{})
 //
 // Return nil if no tile variant passes Χ² filter.
 func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantID, remap []tileVariantID, tag, chunkstarttag tagID) ([][]int8, []onehotXref) {
+	if tag == cmd.debugTag {
+		tv := make([]tileVariantID, len(cmd.cgnames)*2)
+		for i, name := range cmd.cgnames {
+			copy(tv[i*2:(i+1)*2], cgs[name].Variants[(tag-chunkstarttag)*2:])
+		}
+		log.WithFields(logrus.Fields{
+			"cgs[i].Variants[tag*2+j]": tv,
+			"maxv":                     maxv,
+			"remap":                    remap,
+			"tag":                      tag,
+			"chunkstarttag":            chunkstarttag,
+		}).Info("tv2homhet()")
+	}
 	if maxv < 1 || (maxv < 2 && !cmd.includeVariant1) {
 		// everyone has the most common variant (of the variants we don't drop)
 		return nil, nil
