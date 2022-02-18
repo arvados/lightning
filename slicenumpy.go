@@ -122,6 +122,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
 			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
+			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
 		}
 		runner.Args = append(runner.Args, cmd.filter.Args()...)
 		var output string
@@ -1194,13 +1195,13 @@ type onehotXref struct {
 
 const onehotXrefSize = unsafe.Sizeof(onehotXref{})
 
-// Build onehot matrix (m[variant*2+isHet][genome] == 0 or 1) for all
+// Build onehot matrix (m[tileVariantIndex][genome] == 0 or 1) for all
 // variants of a single tile/tag#.
 //
 // Return nil if no tile variant passes Χ² filter.
 func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantID, remap []tileVariantID, tag, chunkstarttag tagID) ([][]int8, []onehotXref) {
-	if maxv < 2 {
-		// everyone has the most common variant
+	if maxv < 1 || (maxv < 2 && !cmd.includeVariant1) {
+		// everyone has the most common variant (of the variants we don't drop)
 		return nil, nil
 	}
 	tagoffset := tag - chunkstarttag
@@ -1218,37 +1219,36 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		obs[i] = make([]bool, len(cmd.cgnames))
 	}
 	for cgid, name := range cmd.cgnames {
-		cgvars := cgs[name].Variants
-		for v := tileVariantID(2); v <= maxv; v++ {
-			if remap[cgvars[tagoffset*2]] == v && remap[cgvars[tagoffset*2+1]] == v {
+		cgvars := cgs[name].Variants[tagoffset*2:]
+		tv0, tv1 := remap[cgvars[0]], remap[cgvars[1]]
+		for v := tileVariantID(1); v <= maxv; v++ {
+			if tv0 == v && tv1 == v {
 				obs[v*2][cgid] = true
-			} else if remap[cgvars[tagoffset*2]] == v || remap[cgvars[tagoffset*2+1]] == v {
+			} else if tv0 == v || tv1 == v {
 				obs[v*2+1][cgid] = true
 			}
 		}
 	}
 	var onehot [][]int8
 	var xref []onehotXref
-	for homcol := 2; homcol < len(obs); homcol += 2 {
-		// homcol 0,1 correspond to tile variant 0, i.e.,
-		// no-call; homcol 2,3 correspond to the most common
-		// variant; so we (normally) start at homcol 4.
-		if homcol < 4 && !cmd.includeVariant1 {
+	for col := 2; col < len(obs); col++ {
+		// col 0,1 correspond to tile variant 0, i.e.,
+		// no-call; col 2,3 correspond to the most common
+		// variant; so we (normally) start at col 4.
+		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
-		for het := 0; het < 2; het++ {
-			p := pvalue(obs[homcol+het], cmd.chi2Cases)
-			if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
-				continue
-			}
-			onehot = append(onehot, bool2int8(obs[homcol+het]))
-			xref = append(xref, onehotXref{
-				tag:     tag,
-				variant: tileVariantID(homcol / 2),
-				het:     het == 1,
-				pvalue:  p,
-			})
+		p := pvalue(obs[col], cmd.chi2Cases)
+		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
+			continue
 		}
+		onehot = append(onehot, bool2int8(obs[col]))
+		xref = append(xref, onehotXref{
+			tag:     tag,
+			variant: tileVariantID(col >> 1),
+			het:     col&1 == 1,
+			pvalue:  p,
+		})
 	}
 	return onehot, xref
 }
