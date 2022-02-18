@@ -148,6 +148,28 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			b:      "tcGCcggac",
 			expect: []string{"3A>G", "4T>C", "7del"},
 		},
+		{
+			// should delete leftmost
+			a:      "acgacaTTtttacac",
+			b:      "acgacatttacac",
+			expect: []string{"7_8del"},
+		},
+		{
+			// should insert leftmost
+			a:      "acgacatttacac",
+			b:      "acgacaTTtttacac",
+			expect: []string{"6_7insTT"},
+		},
+		{
+			a:      "ccccaGATAtat",
+			b:      "ccccatat",
+			expect: []string{"6_9del"},
+		},
+		{
+			a:      "aGATAtat",
+			b:      "atat",
+			expect: []string{"2_5del"},
+		},
 	} {
 		c.Log(trial)
 		var vars []string

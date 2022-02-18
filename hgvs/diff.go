@@ -144,6 +144,27 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			in[i+1] = ins
 			in[i+2] = eq
 		}
+		// when diffmatchpatch says [=yyyyXXXX, delX, =zzz],
+		// we really want [=yyyy, delX, =XXXXzzz] (ditto for
+		// ins instead of del)
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffEqual &&
+			in[i+1].Type != diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffEqual &&
+			len(in[i+1].Text) <= len(d.Text) {
+			for cut := 0; cut < len(d.Text); cut++ {
+				skip := strings.Index(d.Text[cut:], in[i+1].Text)
+				if skip < 0 {
+					break
+				}
+				cut += skip
+				if d.Text[cut:]+in[i+1].Text == in[i+1].Text+d.Text[cut:] {
+					in[i+2].Text = d.Text[cut:] + in[i+2].Text
+					d.Text = d.Text[:cut]
+					break
+				}
+			}
+		}
 		// diffmatchpatch solves diff("AXX","XXX") with
 		// [delA,=XX,insX] but we prefer to spell it
 		// [delA,insX,=XX].
