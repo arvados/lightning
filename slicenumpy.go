@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -363,6 +364,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	throttleMem := throttle{Max: cmd.threads} // TODO: estimate using mem and data size
 	throttleNumpyMem := throttle{Max: cmd.threads/2 + 1}
 	log.Info("generating annotations and numpy matrix for each slice")
+	var errSkip = errors.New("skip infile")
 	var done int64
 	for infileIdx, infile := range infiles {
 		infileIdx, infile := infileIdx, infile
@@ -400,6 +402,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					seq[tv.Tag] = variants
 				}
 				for _, cg := range ent.CompactGenomes {
+					if cmd.filter.MaxTag >= 0 && cg.StartTag > tagID(cmd.filter.MaxTag) {
+						return errSkip
+					}
 					if !matchGenome.MatchString(cg.Name) {
 						continue
 					}
@@ -413,7 +418,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				}
 				return nil
 			})
-			if err != nil {
+			if err == errSkip {
+				return nil
+			} else if err != nil {
 				return err
 			}
 			tagstart := cgs[cmd.cgnames[0]].StartTag
