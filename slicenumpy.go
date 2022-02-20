@@ -433,9 +433,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			throttleCPU := throttle{Max: runtime.GOMAXPROCS(0)}
 			for tag, variants := range seq {
 				tag, variants := tag, variants
-				throttleCPU.Acquire()
-				go func() {
-					defer throttleCPU.Release()
+				throttleCPU.Go(func() error {
 					count := make(map[[blake2b.Size256]byte]int, len(variants))
 
 					rt := reftile[tag]
@@ -449,9 +447,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 							v := cg.Variants[idx+allele]
 							if v > 0 && len(variants[v].Sequence) > 0 {
 								count[variants[v].Blake2b]++
-								if tag == cmd.debugTag {
-									log.Printf("tag %d cg %s allele %d tv %d hash %x count is now %d", tag, cgname, allele, v, variants[v].Blake2b[:3], count[variants[v].Blake2b])
-								}
+							}
+							if v > 0 && tag == cmd.debugTag {
+								log.Printf("tag %d cg %s allele %d tv %d hash %x count is now %d", tag, cgname, allele, v, variants[v].Blake2b[:3], count[variants[v].Blake2b])
 							}
 						}
 					}
@@ -490,7 +488,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						remap[i] = rank[tv.Blake2b]
 					}
 					if tag == cmd.debugTag {
-						log.Printf("tag %d remap %+v", tag, remap)
+						for in, out := range remap {
+							if out > 0 {
+								log.Printf("tag %d remap %d => %d", tag, in, out)
+							}
+						}
 					}
 					variantRemap[tag-tagstart] = remap
 					if rt != nil {
@@ -500,7 +502,8 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						}
 						rt.variant = refrank
 					}
-				}()
+					return nil
+				})
 			}
 			throttleCPU.Wait()
 
@@ -522,7 +525,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					continue
 				}
 				if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
-					continue
+					break
 				}
 				remap := variantRemap[tag-tagstart]
 				maxv := tileVariantID(0)
@@ -532,11 +535,6 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					}
 				}
 				if *onehotChunked || *onehotSingle {
-					if tag == cmd.debugTag {
-						log.WithFields(logrus.Fields{
-							"cgs[2].Variants[tag*2:(tag+1)*2]": cgs[cmd.cgnames[2]].Variants[(tag-tagstart)*2 : (tag-tagstart+1)*2],
-						}).Info("before tv2homhet")
-					}
 					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart)
 					if tag == cmd.debugTag {
 						log.WithFields(logrus.Fields{
@@ -683,19 +681,26 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				cols := 2 * outcol
 				out := make([]int16, rows*cols)
 				for row, name := range cmd.cgnames {
-					out := out[row*cols:]
-					outcol := 0
+					outidx := row * cols
 					for col, v := range cgs[name].Variants {
 						tag := tagstart + tagID(col/2)
-						if mask != nil && reftile[tag] == nil || (cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag)) {
+						if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
+							break
+						}
+						if mask != nil && reftile[tag] == nil {
 							continue
 						}
-						if variants, ok := seq[tag]; ok && len(variants) > int(v) && len(variants[v].Sequence) > 0 {
-							out[outcol] = int16(variantRemap[tag-tagstart][v])
+						if v == 0 {
+							out[outidx] = -1 // 0 better?
+						} else if variants, ok := seq[tag]; ok && int(v) < len(variants) && len(variants[v].Sequence) > 0 {
+							out[outidx] = int16(variantRemap[tag-tagstart][v])
 						} else {
-							out[outcol] = -1
+							out[outidx] = -1
 						}
-						outcol++
+						if tag == cmd.debugTag {
+							log.Printf("tag %d row %d col %d outidx %d v %d out %d", tag, row, col, outidx, v, out[outidx])
+						}
+						outidx++
 					}
 				}
 				seq = nil
