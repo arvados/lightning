@@ -691,11 +691,11 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 							continue
 						}
 						if v == 0 {
-							out[outidx] = -1 // 0 better?
+							out[outidx] = 0 // tag not found / spanning tile
 						} else if variants, ok := seq[tag]; ok && int(v) < len(variants) && len(variants[v].Sequence) > 0 {
 							out[outidx] = int16(variantRemap[tag-tagstart][v])
 						} else {
-							out[outidx] = -1
+							out[outidx] = -1 // low quality tile variant
 						}
 						if tag == cmd.debugTag {
 							log.Printf("tag %d row %d col %d outidx %d v %d out %d", tag, row, col, outidx, v, out[outidx])
