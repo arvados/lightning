@@ -126,6 +126,23 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 	in, out = out, make([]diffmatchpatch.Diff, 0, len(in))
 	for i := 0; i < len(in); i++ {
 		d := in[i]
+		// when diffmatchpatch says [=yyyyXXXX, delX, =zzz],
+		// we really want [=yyyy, delX, =XXXXzzz] (ditto for
+		// ins instead of del)
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffEqual &&
+			in[i+1].Type != diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffEqual &&
+			len(in[i+1].Text) <= len(d.Text) {
+			for cut := 0; cut < len(d.Text)-len(in[i+1].Text); cut++ {
+				if d.Text[cut:] == d.Text[cut+len(in[i+1].Text):]+in[i+1].Text {
+					in[i+2].Text = d.Text[cut+len(in[i+1].Text):] + in[i+1].Text + in[i+2].Text
+					in[i+1].Text = d.Text[cut : cut+len(in[i+1].Text)]
+					d.Text = d.Text[:cut]
+					break
+				}
+			}
+		}
 		// diffmatchpatch solves diff("AAX","XTX") with
 		// [delAA,=X,insTX] but we prefer to spell it
 		// [delAA,insXT,=X].
@@ -143,27 +160,6 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			ins.Text = eq.Text + ins.Text[:len(ins.Text)-len(eq.Text)]
 			in[i+1] = ins
 			in[i+2] = eq
-		}
-		// when diffmatchpatch says [=yyyyXXXX, delX, =zzz],
-		// we really want [=yyyy, delX, =XXXXzzz] (ditto for
-		// ins instead of del)
-		if i < len(in)-2 &&
-			d.Type == diffmatchpatch.DiffEqual &&
-			in[i+1].Type != diffmatchpatch.DiffEqual &&
-			in[i+2].Type == diffmatchpatch.DiffEqual &&
-			len(in[i+1].Text) <= len(d.Text) {
-			for cut := 0; cut < len(d.Text); cut++ {
-				skip := strings.Index(d.Text[cut:], in[i+1].Text)
-				if skip < 0 {
-					break
-				}
-				cut += skip
-				if d.Text[cut:]+in[i+1].Text == in[i+1].Text+d.Text[cut:] {
-					in[i+2].Text = d.Text[cut:] + in[i+2].Text
-					d.Text = d.Text[:cut]
-					break
-				}
-			}
 		}
 		// diffmatchpatch solves diff("AXX","XXX") with
 		// [delA,=XX,insX] but we prefer to spell it
@@ -224,6 +220,12 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			continue
 		}
 		out = append(out, d)
+	}
+	in, out = out, make([]diffmatchpatch.Diff, 0, len(in))
+	for _, d := range in {
+		if len(d.Text) > 0 {
+			out = append(out, d)
+		}
 	}
 	// for i := 0; i < len(out)-1; i++ {
 	// 	if out[i].Type == diffmatchpatch.DiffDelete && len(out[i].Text) == 2 &&
