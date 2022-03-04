@@ -1236,7 +1236,7 @@ func allele2homhet(colpair [2][]int8) {
 type onehotXref struct {
 	tag     tagID
 	variant tileVariantID
-	het     bool
+	hom     bool
 	pvalue  float64
 }
 
@@ -1306,7 +1306,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		xref = append(xref, onehotXref{
 			tag:     tag,
 			variant: tileVariantID(col >> 1),
-			het:     col&1 == 1,
+			hom:     col&1 == 0,
 			pvalue:  p,
 		})
 	}
@@ -1335,7 +1335,7 @@ func onehotXref2int32(xrefs []onehotXref) []int32 {
 	for i, xref := range xrefs {
 		xdata[i] = int32(xref.tag)
 		xdata[xcols+i] = int32(xref.variant)
-		if xref.het {
+		if xref.hom {
 			xdata[xcols*2+i] = 1
 		}
 		xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
