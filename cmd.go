@@ -33,6 +33,7 @@ var (
 		"flake":              &flakecmd{},
 		"slice":              &slicecmd{},
 		"slice-numpy":        &sliceNumpy{},
+		"tiling-stats":       &tilingStats{},
 		"anno2vcf":           &anno2vcf{},
 		"numpy-comvar":       &numpyComVar{},
 		"filter":             &filtercmd{},

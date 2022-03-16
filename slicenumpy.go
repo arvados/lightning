@@ -166,7 +166,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 
 	cmd.cgnames = nil
 	var tagset [][]byte
-	DecodeLibrary(in0, strings.HasSuffix(infiles[0], ".gz"), func(ent *LibraryEntry) error {
+	err = DecodeLibrary(in0, strings.HasSuffix(infiles[0], ".gz"), func(ent *LibraryEntry) error {
 		if len(ent.TagSet) > 0 {
 			tagset = ent.TagSet
 		}
