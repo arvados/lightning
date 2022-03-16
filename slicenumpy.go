@@ -360,6 +360,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		onehotChunkSize = make([]uint32, len(infiles))
 		onehotXrefs = make([][]onehotXref, len(infiles))
 	}
+	chunkStartTag := make([]tagID, len(infiles))
 
 	throttleMem := throttle{Max: cmd.threads} // TODO: estimate using mem and data size
 	throttleNumpyMem := throttle{Max: cmd.threads/2 + 1}
@@ -425,6 +426,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			}
 			tagstart := cgs[cmd.cgnames[0]].StartTag
 			tagend := cgs[cmd.cgnames[0]].EndTag
+			chunkStartTag[infileIdx] = tagstart
 
 			// TODO: filters
 
@@ -1001,6 +1003,28 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		fnm = fmt.Sprintf("%s/onehot-columns.npy", *outputDir)
 		err = writeNumpyInt32(fnm, onehotXref2int32(xrefs), 4, len(xrefs))
 		if err != nil {
+			return 1
+		}
+	}
+	if !*mergeOutput && !*onehotChunked && !*onehotSingle {
+		tagoffsetFilename := *outputDir + "/chunk-tag-offset.csv"
+		log.Infof("writing tag offsets to %s", tagoffsetFilename)
+		var f *os.File
+		f, err = os.Create(tagoffsetFilename)
+		if err != nil {
+			return 1
+		}
+		defer f.Close()
+		for idx, offset := range chunkStartTag {
+			_, err = fmt.Fprintf(f, "%q,%d\n", fmt.Sprintf("matrix.%04d.npy", idx), offset)
+			if err != nil {
+				err = fmt.Errorf("write %s: %w", tagoffsetFilename, err)
+				return 1
+			}
+		}
+		err = f.Close()
+		if err != nil {
+			err = fmt.Errorf("close %s: %w", tagoffsetFilename, err)
 			return 1
 		}
 	}
