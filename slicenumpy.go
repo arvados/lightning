@@ -1001,7 +1001,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			return 1
 		}
 		fnm = fmt.Sprintf("%s/onehot-columns.npy", *outputDir)
-		err = writeNumpyInt32(fnm, onehotXref2int32(xrefs), 4, len(xrefs))
+		err = writeNumpyInt32(fnm, onehotXref2int32(xrefs), 5, len(xrefs))
 		if err != nil {
 			return 1
 		}
@@ -1355,7 +1355,7 @@ func bool2int8(in []bool) []int8 {
 // P-value row contains 1000000x actual p-value.
 func onehotXref2int32(xrefs []onehotXref) []int32 {
 	xcols := len(xrefs)
-	xdata := make([]int32, 4*xcols)
+	xdata := make([]int32, 5*xcols)
 	for i, xref := range xrefs {
 		xdata[i] = int32(xref.tag)
 		xdata[xcols+i] = int32(xref.variant)
@@ -1363,6 +1363,7 @@ func onehotXref2int32(xrefs []onehotXref) []int32 {
 			xdata[xcols*2+i] = 1
 		}
 		xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
+		xdata[xcols*4+i] = int32(-math.Log10(xref.pvalue) * 1000000)
 	}
 	return xdata
 }
