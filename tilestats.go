@@ -140,9 +140,22 @@ func (cmd *tilingStats) RunCommand(prog string, args []string, stdin io.Reader, 
 			seqnames = append(seqnames, seqname)
 		}
 		sort.Strings(seqnames)
+		// Mark duplicate tags (tags that place more than once
+		// on the reference)
+		duptag := map[tagID]bool{}
+		for _, seqname := range seqnames {
+			for _, libref := range cseq.TileSequences[seqname] {
+				if dup, seen := duptag[libref.Tag]; seen && !dup {
+					duptag[libref.Tag] = true
+				}
+			}
+		}
 		for _, seqname := range seqnames {
 			pos := 0
 			for _, libref := range cseq.TileSequences[seqname] {
+				if duptag[libref.Tag] {
+					continue
+				}
 				tiledata := reftiledata[libref]
 				if len(tiledata) <= taglen {
 					err = fmt.Errorf("bogus input data: ref tile libref %v has len %d < taglen %d", libref, len(tiledata), taglen)
