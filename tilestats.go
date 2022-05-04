@@ -147,6 +147,8 @@ func (cmd *tilingStats) RunCommand(prog string, args []string, stdin io.Reader, 
 			for _, libref := range cseq.TileSequences[seqname] {
 				if dup, seen := duptag[libref.Tag]; seen && !dup {
 					duptag[libref.Tag] = true
+				} else {
+					duptag[libref.Tag] = false
 				}
 			}
 		}
