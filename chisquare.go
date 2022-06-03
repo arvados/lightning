@@ -40,5 +40,5 @@ func pvalue(x, y []bool) float64 {
 		d := obs[i] - exp[i]
 		sum += d * d / exp[i]
 	}
-	return 1 - chisquared.CDF(sum)
+	return chisquared.Survival(sum)
 }
