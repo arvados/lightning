@@ -537,7 +537,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					}
 				}
 				if *onehotChunked || *onehotSingle {
-					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart)
+					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart, seq)
 					if tag == cmd.debugTag {
 						log.WithFields(logrus.Fields{
 							"onehot": onehot,
@@ -1270,7 +1270,7 @@ const onehotXrefSize = unsafe.Sizeof(onehotXref{})
 // variants of a single tile/tag#.
 //
 // Return nil if no tile variant passes Χ² filter.
-func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantID, remap []tileVariantID, tag, chunkstarttag tagID) ([][]int8, []onehotXref) {
+func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantID, remap []tileVariantID, tag, chunkstarttag tagID, seq map[tagID][]TileVariant) ([][]int8, []onehotXref) {
 	if tag == cmd.debugTag {
 		tv := make([]tileVariantID, len(cmd.cgnames)*2)
 		for i, name := range cmd.cgnames {
@@ -1291,7 +1291,13 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	tagoffset := tag - chunkstarttag
 	coverage := 0
 	for _, cg := range cgs {
-		if cg.Variants[tagoffset*2] > 0 && cg.Variants[tagoffset*2+1] > 0 {
+		alleles := 0
+		for _, v := range cg.Variants[tagoffset*2 : tagoffset*2+2] {
+			if v > 0 && int(v) < len(seq[tagoffset]) && len(seq[tagoffset][v].Sequence) > 0 {
+				alleles++
+			}
+		}
+		if alleles == 2 {
 			coverage++
 		}
 	}

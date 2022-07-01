@@ -381,6 +381,7 @@ func (s *sliceSuite) Test_tv2homhet(c *check.C) {
 		chi2Cases:       []bool{false, true, true, false},
 		chi2PValue:      .5,
 		includeVariant1: true,
+		minCoverage:     3,
 	}
 	cgs := map[string]CompactGenome{
 		"sample1": CompactGenome{
@@ -399,9 +400,12 @@ func (s *sliceSuite) Test_tv2homhet(c *check.C) {
 	maxv := tileVariantID(3)
 	remap := []tileVariantID{0, 1, 0, 0, 0, 2, 0, 0, 0, 3}
 	chunkstarttag := tagID(10)
+	fakevariant := TileVariant{Sequence: []byte("ACGT")}
+	seq := map[tagID][]TileVariant{}
 	for tag := tagID(10); tag < 12; tag++ {
+		seq[tag-chunkstarttag] = []TileVariant{TileVariant{}, fakevariant, TileVariant{}, TileVariant{}, TileVariant{}, fakevariant}
 		c.Logf("=== tag %d", tag)
-		chunk, xref := cmd.tv2homhet(cgs, maxv, remap, tag, chunkstarttag)
+		chunk, xref := cmd.tv2homhet(cgs, maxv, remap, tag, chunkstarttag, seq)
 		c.Logf("chunk len=%d", len(chunk))
 		for _, x := range chunk {
 			c.Logf("%+v", x)
