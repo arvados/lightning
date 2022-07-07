@@ -1293,7 +1293,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	for _, cg := range cgs {
 		alleles := 0
 		for _, v := range cg.Variants[tagoffset*2 : tagoffset*2+2] {
-			if v > 0 && int(v) < len(seq[tagoffset]) && len(seq[tagoffset][v].Sequence) > 0 {
+			if v > 0 && int(v) < len(seq[tag]) && len(seq[tag][v].Sequence) > 0 {
 				alleles++
 			}
 		}
