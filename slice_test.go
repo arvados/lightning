@@ -341,15 +341,15 @@ pipeline1dup/input2	0
 		defer f.Close()
 		npy, err := gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{2, 16})
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 12})
 		onehot, err := npy.GetUint32()
 		if c.Check(err, check.IsNil) {
 			for r := 0; r < npy.Shape[0]; r++ {
 				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
 			}
 			c.Check(onehot, check.DeepEquals, []uint32{
-				0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 0, 2,
-				0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7,
+				0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 0, 2,
+				0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
 			})
 		}
 
@@ -358,18 +358,18 @@ pipeline1dup/input2	0
 		defer f.Close()
 		npy, err = gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{8, 5})
+		c.Check(npy.Shape, check.DeepEquals, []int{5, 6})
 		onehotcols, err := npy.GetInt32()
 		if c.Check(err, check.IsNil) {
 			for r := 0; r < npy.Shape[0]; r++ {
 				c.Logf("%v", onehotcols[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
 			}
 			c.Check(onehotcols, check.DeepEquals, []int32{
-				0, 0, 1, 4, 4, 4, 6, 6,
-				2, 3, 2, 2, 3, 4, 2, 3,
-				0, 1, 0, 0, 0, 0, 0, 0,
-				157299, 157299, 157299, 157299, 157299, 157299, 157299, 157299,
-				803273, 803273, 803273, 803273, 803273, 803273, 803273, 803273,
+				1, 4, 4, 4, 6, 6,
+				2, 2, 3, 4, 2, 3,
+				0, 0, 0, 0, 0, 0,
+				157299, 157299, 157299, 157299, 157299, 157299,
+				803273, 803273, 803273, 803273, 803273, 803273,
 			})
 		}
 	}
