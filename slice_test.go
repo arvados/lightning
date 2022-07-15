@@ -446,7 +446,7 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Logf("%s", dumped)
 		// spanning tile for tag 5 with A>G snp in tag 6
-		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n5,1,0,chr2,225,.*AAAACTGATCCGAAAAAAATACAA.*`)
+		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n5,2,0,chr2,225,.*AAAACTGATCCGAAAAAAATACAA.*`)
 		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n6,1,1,chr2,349,AAAACTGATCCAAAAAAAATACAA.*`)
 	}
 
@@ -467,9 +467,12 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 		defer f.Close()
 		npy, err := gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 4})
 		variants, err := npy.GetInt16()
-		c.Check(variants, check.DeepEquals, []int16{-1, -1, 1, 1})
+		c.Check(variants, check.DeepEquals, []int16{
+			-1, -1, 1, 1,
+			-1, -1, 1, 2,
+		})
 
 		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
 		c.Assert(err, check.IsNil)
@@ -480,9 +483,12 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 		defer f.Close()
 		npy, err = gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 4})
 		variants, err = npy.GetInt16()
-		c.Check(variants, check.DeepEquals, []int16{1, 1, 1, 2})
+		c.Check(variants, check.DeepEquals, []int16{
+			1, 1, 2, 1,
+			1, 1, 1, 1,
+		})
 
 		annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
 		c.Assert(err, check.IsNil)
@@ -513,9 +519,9 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 		defer f.Close()
 		npy, err := gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{1, 2})
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 2})
 		variants, err := npy.GetInt16()
-		c.Check(variants, check.DeepEquals, []int16{-1, -1})
+		c.Check(variants, check.DeepEquals, []int16{-1, -1, -1, -1})
 
 		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
 		c.Assert(err, check.IsNil)
@@ -554,10 +560,11 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 		defer f.Close()
 		npy, err := gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 4})
 		variants, err := npy.GetInt16()
 		if c.Check(err, check.IsNil) {
 			c.Check(variants, check.DeepEquals, []int16{
+				-1, -1, 1, 1,
 				-1, -1, 1, 1,
 			})
 		}
@@ -665,9 +672,7 @@ spanningtile/input1	1
 			for r := 0; r < npy.Shape[0]; r++ {
 				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
 			}
-			c.Check(onehot, check.DeepEquals, []uint32{
-				0, 1,
-			})
+			c.Check(onehot, check.DeepEquals, []uint32{0, 3})
 		}
 
 		f, err = os.Open(npydir + "/onehot-columns.npy")
@@ -675,18 +680,18 @@ spanningtile/input1	1
 		defer f.Close()
 		npy, err = gonpy.NewReader(f)
 		c.Assert(err, check.IsNil)
-		c.Check(npy.Shape, check.DeepEquals, []int{5, 2})
+		c.Check(npy.Shape, check.DeepEquals, []int{5, 4})
 		onehotcols, err := npy.GetInt32()
 		if c.Check(err, check.IsNil) {
 			for r := 0; r < npy.Shape[0]; r++ {
 				c.Logf("%v", onehotcols[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
 			}
 			c.Check(onehotcols, check.DeepEquals, []int32{
-				5, 5,
-				2, 2,
-				1, 0,
-				1000000, 1000000,
-				0, 0,
+				1, 1, 5, 5,
+				2, 2, 2, 2,
+				1, 0, 1, 0,
+				1000000, 1000000, 1000000, 1000000,
+				0, 0, 0, 0,
 			})
 		}
 	}
