@@ -34,6 +34,8 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
+const annotationMaxTileSpan = 100
+
 type sliceNumpy struct {
 	filter                filter
 	threads               int
@@ -216,6 +218,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	if err != nil {
 		return 1
 	}
+	if len(cmd.cgnames) == 0 {
+		err = fmt.Errorf("fatal: 0 cases, 0 controls, nothing to do")
+		return 1
+	}
 	cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
 
 	{
@@ -251,11 +257,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		seqname  string // chr1
 		pos      int    // distance from start of chromosome to starttag
 		tiledata []byte // acgtggcaa...
+		excluded bool   // true if excluded by regions file
+		nexttag  tagID  // tagID of following tile (-1 for last tag of chromosome)
 	}
 	isdup := map[tagID]bool{}
 	reftile := map[tagID]*reftileinfo{}
 	for seqname, cseq := range refseq {
 		pos := 0
+		lastreftag := tagID(-1)
 		for _, libref := range cseq {
 			if cmd.filter.MaxTag >= 0 && libref.Tag > tagID(cmd.filter.MaxTag) {
 				continue
@@ -292,7 +301,12 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					variant:  libref.Variant,
 					tiledata: tiledata,
 					pos:      pos,
+					nexttag:  -1,
 				}
+				if lastreftag >= 0 {
+					reftile[lastreftag].nexttag = libref.Tag
+				}
+				lastreftag = libref.Tag
 			}
 			pos += len(tiledata) - taglen
 		}
@@ -308,9 +322,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		log.Printf("before applying mask, len(reftile) == %d", len(reftile))
 		log.Printf("deleting reftile entries for regions outside %d intervals", mask.Len())
-		for tag, rt := range reftile {
+		for _, rt := range reftile {
 			if !mask.Check(strings.TrimPrefix(rt.seqname, "chr"), rt.pos, rt.pos+len(rt.tiledata)) {
-				delete(reftile, tag)
+				rt.excluded = true
 			}
 		}
 		log.Printf("after applying mask, len(reftile) == %d", len(reftile))
@@ -383,10 +397,22 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					if tv.Ref {
 						continue
 					}
+					// Skip tile with no
+					// corresponding ref tile, if
+					// mask is in play (we can't
+					// determine coordinates for
+					// these)
 					if mask != nil && reftile[tv.Tag] == nil {
-						// Don't waste
-						// time/memory on
-						// masked-out tiles.
+						continue
+					}
+					// Skip tile whose
+					// corresponding ref tile is
+					// outside target regions --
+					// unless it's a potential
+					// spanning tile.
+					if mask != nil && reftile[tv.Tag].excluded &&
+						(int(tv.Tag+1) >= len(tagset) ||
+							(bytes.HasSuffix(tv.Sequence, tagset[tv.Tag+1]) && reftile[tv.Tag+1] != nil && !reftile[tv.Tag+1].excluded)) {
 						continue
 					}
 					if tv.Tag == cmd.debugTag {
@@ -523,7 +549,20 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			for tag := tagstart; tag < tagend; tag++ {
 				rt := reftile[tag]
 				if rt == nil && mask != nil {
-					// Excluded by specified regions
+					// With no ref tile, we don't
+					// have coordinates to say
+					// this is in the desired
+					// regions -- so it's not.
+					// TODO: handle ref spanning
+					// tile case.
+					continue
+				}
+				if rt != nil && rt.excluded {
+					// TODO: don't skip yet --
+					// first check for spanning
+					// tile variants that
+					// intersect non-excluded ref
+					// tiles.
 					continue
 				}
 				if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
@@ -550,6 +589,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				if rt == nil {
 					// Reference does not use any
 					// variant of this tile
+					//
+					// TODO: diff against the
+					// relevant portion of the
+					// ref's spanning tile
 					outcol++
 					continue
 				}
@@ -566,11 +609,29 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					} else {
 						done[v] = true
 					}
-					if len(tv.Sequence) < taglen || !bytes.HasSuffix(rt.tiledata, tv.Sequence[len(tv.Sequence)-taglen:]) {
+					if len(tv.Sequence) < taglen {
+						continue
+					}
+					// if reftilestr doesn't end
+					// in the same tag as tv,
+					// extend reftilestr with
+					// following ref tiles until
+					// it does (up to an arbitrary
+					// sanity-check limit)
+					reftilestr := reftilestr
+					endtagstr := strings.ToUpper(string(tv.Sequence[len(tv.Sequence)-taglen:]))
+					for i, rt := 0, rt; i < annotationMaxTileSpan && !strings.HasSuffix(reftilestr, endtagstr) && rt.nexttag >= 0; i++ {
+						rt = reftile[rt.nexttag]
+						reftilestr += strings.ToUpper(string(rt.tiledata[taglen:]))
+					}
+					if mask != nil && !mask.Check(strings.TrimPrefix(rt.seqname, "chr"), rt.pos, rt.pos+len(reftilestr)) {
+						continue
+					}
+					if !strings.HasSuffix(reftilestr, endtagstr) {
 						fmt.Fprintf(annow, "%d,%d,%d,,%s,%d,,,\n", tag, outcol, v, rt.seqname, rt.pos)
 						continue
 					}
-					if lendiff := len(rt.tiledata) - len(tv.Sequence); lendiff < -1000 || lendiff > 1000 {
+					if lendiff := len(reftilestr) - len(tv.Sequence); lendiff < -1000 || lendiff > 1000 {
 						fmt.Fprintf(annow, "%d,%d,%d,,%s,%d,,,\n", tag, outcol, v, rt.seqname, rt.pos)
 						continue
 					}
@@ -689,7 +750,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
 							break
 						}
-						if mask != nil && reftile[tag] == nil {
+						if rt := reftile[tag]; rt == nil || rt.excluded {
 							continue
 						}
 						if v == 0 {

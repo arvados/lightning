@@ -261,9 +261,13 @@ pipeline1dup/input2	0
 
 		annotations, err := ioutil.ReadFile(npydir + "/hgvs.chr2.annotations.csv")
 		c.Assert(err, check.IsNil)
-		c.Check(string(annotations), check.Equals, `0,chr2:g.470_472del
-1,chr2:g.471G>A
-2,chr2:g.472G>A
+		c.Check(string(annotations), check.Equals, `0,chr2:g.1_3delinsAAA
+1,chr2:g.125_127delinsAAA
+2,chr2:g.241_245delinsAAAAA
+3,chr2:g.291C>A
+4,chr2:g.470_472del
+5,chr2:g.471G>A
+6,chr2:g.472G>A
 `)
 	}
 
@@ -370,6 +374,319 @@ pipeline1dup/input2	0
 				0, 0, 0, 0, 0, 0,
 				157299, 157299, 157299, 157299, 157299, 157299,
 				803273, 803273, 803273, 803273, 803273, 803273,
+			})
+		}
+	}
+}
+
+func (s *sliceSuite) TestSpanningTile(c *check.C) {
+	tmpdir := c.MkDir()
+	err := os.Mkdir(tmpdir+"/lib1", 0777)
+	c.Assert(err, check.IsNil)
+	err = os.Mkdir(tmpdir+"/lib2", 0777)
+	c.Assert(err, check.IsNil)
+	cwd, err := os.Getwd()
+	c.Assert(err, check.IsNil)
+	err = os.Symlink(cwd+"/testdata/pipeline1", tmpdir+"/pipeline1")
+	c.Assert(err, check.IsNil)
+	err = os.Symlink(cwd+"/testdata/pipeline1", tmpdir+"/pipeline1dup")
+	c.Assert(err, check.IsNil)
+
+	err = ioutil.WriteFile(tmpdir+"/chr1-12-100.bed", []byte("chr1\t12\t100\ttest.1\n"), 0644)
+	c.Check(err, check.IsNil)
+
+	c.Log("=== import testdata/ref ===")
+	exited := (&importer{}).RunCommand("import", []string{
+		"-local=true",
+		"-tag-library", "testdata/tags",
+		"-output-tiles",
+		"-save-incomplete-tiles",
+		"-o", tmpdir + "/lib1/library1.gob",
+		"testdata/ref.fasta",
+	}, nil, os.Stderr, os.Stderr)
+	c.Assert(exited, check.Equals, 0)
+
+	c.Log("=== import testdata/spanningtile ===")
+	exited = (&importer{}).RunCommand("import", []string{
+		"-local=true",
+		"-tag-library", "testdata/tags",
+		"-output-tiles",
+		"-o", tmpdir + "/lib2/library2.gob",
+		cwd + "/testdata/spanningtile",
+	}, nil, os.Stderr, os.Stderr)
+	c.Assert(exited, check.Equals, 0)
+
+	slicedir := c.MkDir()
+
+	c.Log("=== slice ===")
+	exited = (&slicecmd{}).RunCommand("slice", []string{
+		"-local=true",
+		"-output-dir=" + slicedir,
+		"-tags-per-file=2",
+		tmpdir + "/lib1",
+		tmpdir + "/lib2",
+	}, nil, os.Stderr, os.Stderr)
+	c.Check(exited, check.Equals, 0)
+	out, _ := exec.Command("find", slicedir, "-ls").CombinedOutput()
+	c.Logf("%s", out)
+
+	c.Log("=== dump ===")
+	{
+		dumpdir := c.MkDir()
+		exited = (&dump{}).RunCommand("dump", []string{
+			"-local=true",
+			"-tags=5,6",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + dumpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", dumpdir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+		dumped, err := ioutil.ReadFile(dumpdir + "/variants.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", dumped)
+		// spanning tile for tag 5 with A>G snp in tag 6
+		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n5,1,0,chr2,225,.*AAAACTGATCCGAAAAAAATACAA.*`)
+		c.Check("\n"+string(dumped), check.Matches, `(?ms).*\n6,1,1,chr2,349,AAAACTGATCCAAAAAAAATACAA.*`)
+	}
+
+	c.Log("=== slice-numpy ===")
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/matrix.0000.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		variants, err := npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{-1, -1, 1, 1})
+
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+
+		f, err = os.Open(npydir + "/matrix.0002.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err = gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		variants, err = npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{1, 1, 1, 2})
+
+		annotations, err = ioutil.ReadFile(npydir + "/matrix.0002.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Logf("%s", annotations)
+		for _, s := range []string{
+			"chr2:g\\.360A>G",
+		} {
+			c.Check(string(annotations), check.Matches, "(?ms).*"+s+".*")
+		}
+	}
+
+	c.Log("=== slice-numpy + regions ===")
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-regions=" + tmpdir + "/chr1-12-100.bed",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+			"-chunked-hgvs-matrix=true",
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/matrix.0000.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{1, 2})
+		variants, err := npy.GetInt16()
+		c.Check(variants, check.DeepEquals, []int16{-1, -1})
+
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.0000.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Check(string(annotations), check.Equals, "0,0,1,=,chr1,0,,,\n")
+
+		for _, fnm := range []string{
+			npydir + "/matrix.0001.annotations.csv",
+			npydir + "/matrix.0002.annotations.csv",
+		} {
+			annotations, err := ioutil.ReadFile(fnm)
+			c.Assert(err, check.IsNil)
+			c.Check(string(annotations), check.Equals, "", check.Commentf(fnm))
+		}
+	}
+
+	err = ioutil.WriteFile(tmpdir+"/chr1and2-100-200.bed", []byte("chr1\t100\t200\ttest.1\nchr2\t100\t200\ttest.2\n"), 0644)
+	c.Check(err, check.IsNil)
+
+	c.Log("=== slice-numpy + regions + merge ===")
+	{
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-regions=" + tmpdir + "/chr1and2-100-200.bed",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+			"-merge-output=true",
+			"-single-hgvs-matrix=true",
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/matrix.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{1, 4})
+		variants, err := npy.GetInt16()
+		if c.Check(err, check.IsNil) {
+			c.Check(variants, check.DeepEquals, []int16{
+				-1, -1, 1, 1,
+			})
+		}
+
+		annotations, err := ioutil.ReadFile(npydir + "/matrix.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Check(string(annotations), check.Equals, "")
+	}
+
+	c.Log("=== slice-numpy + chunked hgvs matrix ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+spanningtile/input1	1
+`), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-chunked-hgvs-matrix=true",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
+			"-chi2-p-value=1",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		annotations, err := ioutil.ReadFile(npydir + "/hgvs.chr2.annotations.csv")
+		c.Assert(err, check.IsNil)
+		c.Check(string(annotations), check.Equals, `0,chr2:g.360A>G
+`)
+	}
+
+	c.Log("=== slice-numpy + onehotChunked ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+spanningtile/input1	1
+`), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-chunked-onehot=true",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
+			"-chi2-p-value=1",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/onehot.0002.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{1, 2})
+		onehot, err := npy.GetInt8()
+		if c.Check(err, check.IsNil) {
+			for r := 0; r < npy.Shape[0]; r++ {
+				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
+			}
+			c.Check(onehot, check.DeepEquals, []int8{
+				0, 1, // input1
+			})
+		}
+	}
+
+	c.Log("=== slice-numpy + onehotSingle ===")
+	{
+		err = ioutil.WriteFile(tmpdir+"/casecontrol.tsv", []byte(`SampleID	CC
+spanningtile/input1	1
+`), 0600)
+		c.Assert(err, check.IsNil)
+		npydir := c.MkDir()
+		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+			"-local=true",
+			"-single-onehot=true",
+			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-chi2-case-control-column=CC",
+			"-chi2-p-value=1",
+			"-min-coverage=0.75",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + npydir,
+			"-debug-tag=1",
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+		out, _ := exec.Command("find", npydir, "-ls").CombinedOutput()
+		c.Logf("%s", out)
+
+		f, err := os.Open(npydir + "/onehot.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err := gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{2, 1})
+		onehot, err := npy.GetUint32()
+		if c.Check(err, check.IsNil) {
+			for r := 0; r < npy.Shape[0]; r++ {
+				c.Logf("%v", onehot[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
+			}
+			c.Check(onehot, check.DeepEquals, []uint32{
+				0, 1,
+			})
+		}
+
+		f, err = os.Open(npydir + "/onehot-columns.npy")
+		c.Assert(err, check.IsNil)
+		defer f.Close()
+		npy, err = gonpy.NewReader(f)
+		c.Assert(err, check.IsNil)
+		c.Check(npy.Shape, check.DeepEquals, []int{5, 2})
+		onehotcols, err := npy.GetInt32()
+		if c.Check(err, check.IsNil) {
+			for r := 0; r < npy.Shape[0]; r++ {
+				c.Logf("%v", onehotcols[r*npy.Shape[1]:(r+1)*npy.Shape[1]])
+			}
+			c.Check(onehotcols, check.DeepEquals, []int32{
+				5, 5,
+				2, 2,
+				1, 0,
+				1000000, 1000000,
+				0, 0,
 			})
 		}
 	}
