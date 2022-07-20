@@ -572,6 +572,8 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 				todo <- jobT{seqlabel, append([]byte(nil), fasta...)}
 				seqlabel, fasta = strings.SplitN(string(buf[1:]), " ", 2)[0], fasta[:0]
 				log.Debugf("%s %s reading fasta", filelabel, seqlabel)
+			} else if len(buf) > 0 && buf[0] == '#' {
+				// ignore testdata comment
 			} else {
 				fasta = append(fasta, bytes.ToLower(buf)...)
 			}

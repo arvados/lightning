@@ -622,6 +622,9 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					endtagstr := strings.ToUpper(string(tv.Sequence[len(tv.Sequence)-taglen:]))
 					for i, rt := 0, rt; i < annotationMaxTileSpan && !strings.HasSuffix(reftilestr, endtagstr) && rt.nexttag >= 0; i++ {
 						rt = reftile[rt.nexttag]
+						if rt == nil {
+							break
+						}
 						reftilestr += strings.ToUpper(string(rt.tiledata[taglen:]))
 					}
 					if mask != nil && !mask.Check(strings.TrimPrefix(rt.seqname, "chr"), rt.pos, rt.pos+len(reftilestr)) {
