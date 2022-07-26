@@ -219,6 +219,19 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			i++
 			continue
 		}
+		// when diffmatchpatch says [delA, =X, delBX], we
+		// prefer [delAB, =X].
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffDelete &&
+			strings.HasSuffix(in[i+2].Text, in[i+1].Text) {
+			out = append(out,
+				diffmatchpatch.Diff{diffmatchpatch.DiffDelete, d.Text + in[i+2].Text[:len(in[i+2].Text)-len(in[i+1].Text)]},
+				in[i+1])
+			i += 2
+			continue
+		}
 		out = append(out, d)
 	}
 	in, out = out, make([]diffmatchpatch.Diff, 0, len(in))
