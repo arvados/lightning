@@ -264,12 +264,25 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			continue
 		}
 		// [=AB,insCB,=D] => [=A,insBC,=BD]
+		// and
+		// [=AB,delCB,=D] => [=A,delBC,=BD]
 		if i < len(in)-2 &&
 			d.Type == diffmatchpatch.DiffEqual &&
-			in[i+1].Type == diffmatchpatch.DiffInsert &&
+			in[i+1].Type != diffmatchpatch.DiffEqual &&
 			in[i+2].Type == diffmatchpatch.DiffEqual &&
 			len(d.Text) > 0 && len(in[i+1].Text) > 0 &&
-			d.Text[len(d.Text)-1] == in[i+1].Text[len(in[i+1].Text)-1] {
+			d.Text[len(d.Text)-1] == in[i+1].Text[len(in[i+1].Text)-1] &&
+			!(i+3 < len(in) &&
+				// Except: leave deletion alone if an
+				// upcoming insertion will be moved up
+				// against it: e.g., for
+				// [=AB,delCB,=D,insED] we want
+				// [=AB,delCB,=D,insED] for now, so it
+				// can become [=AB,delCB,insDE,=D] on
+				// the next iteration.
+				in[i+1].Type == diffmatchpatch.DiffDelete &&
+				in[i+3].Type == diffmatchpatch.DiffInsert &&
+				strings.HasSuffix(in[i+3].Text, in[i+2].Text)) {
 			// Find x, length of common suffix B
 			x := 1
 			for ; x <= len(d.Text) && x <= len(in[i+1].Text); x++ {
