@@ -175,6 +175,37 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			in[i+1].Text+in[i+2].Text == in[i+2].Text+in[i+1].Text {
 			in[i+2], in[i+1] = in[i+1], in[i+2]
 		}
+		// Likewise, diffmatchpatch solves
+		// diff("XXXA","XXAA") with [delX,=XXA,insA], we
+		// prefer [=XX,delX,insA,=A]
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffDelete &&
+			in[i+1].Type == diffmatchpatch.DiffEqual &&
+			in[i+2].Type == diffmatchpatch.DiffInsert {
+			redo := false
+			for x := len(d.Text); x <= len(in[i+1].Text)-len(in[i+2].Text); x++ {
+				// d  in[i+1]  in[i+2]
+				// x  xxx aaa  a
+				//       ^
+				// x  xx
+				//    xxx
+				//        aaa
+				//         aa  a
+				if d.Text+in[i+1].Text[:x-len(d.Text)] == in[i+1].Text[:x] &&
+					in[i+1].Text[x:] == in[i+1].Text[x+len(in[i+2].Text):]+in[i+2].Text {
+					out = append(out, diffmatchpatch.Diff{diffmatchpatch.DiffEqual, d.Text + in[i+1].Text[:x-len(d.Text)]})
+					in[i], in[i+1], in[i+2] = diffmatchpatch.Diff{diffmatchpatch.DiffDelete, in[i+1].Text[x-len(d.Text) : x]},
+						diffmatchpatch.Diff{diffmatchpatch.DiffInsert, in[i+1].Text[x : x+len(in[i+2].Text)]},
+						diffmatchpatch.Diff{diffmatchpatch.DiffEqual, in[i+1].Text[x+len(in[i+2].Text):] + in[i+2].Text}
+					redo = true
+					break
+				}
+			}
+			if redo {
+				i--
+				continue
+			}
+		}
 		// when diffmatchpatch says [delAAA, insXAY] and
 		// len(X)==1, we prefer to treat the A>X as a snp.
 		if i < len(in)-1 &&
