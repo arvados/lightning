@@ -263,6 +263,27 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			i += 2
 			continue
 		}
+		// [=AB,insCB,=D] => [=A,insBC,=BD]
+		if i < len(in)-2 &&
+			d.Type == diffmatchpatch.DiffEqual &&
+			in[i+1].Type == diffmatchpatch.DiffInsert &&
+			in[i+2].Type == diffmatchpatch.DiffEqual &&
+			len(d.Text) > 0 && len(in[i+1].Text) > 0 &&
+			d.Text[len(d.Text)-1] == in[i+1].Text[len(in[i+1].Text)-1] {
+			// Find x, length of common suffix B
+			x := 1
+			for ; x <= len(d.Text) && x <= len(in[i+1].Text); x++ {
+				if d.Text[len(d.Text)-x] != in[i+1].Text[len(in[i+1].Text)-x] {
+					break
+				}
+			}
+			x--
+			d.Text, in[i+1].Text, in[i+2].Text =
+				d.Text[:len(d.Text)-x],
+				d.Text[len(d.Text)-x:]+
+					in[i+1].Text[:len(in[i+1].Text)-x],
+				in[i+1].Text[len(in[i+1].Text)-x:]+in[i+2].Text
+		}
 		out = append(out, d)
 	}
 	in, out = out, make([]diffmatchpatch.Diff, 0, len(in))
