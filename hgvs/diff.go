@@ -250,19 +250,6 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			i++
 			continue
 		}
-		// when diffmatchpatch says [delA, =X, delBX], we
-		// prefer [delAB, =X].
-		if i < len(in)-2 &&
-			d.Type == diffmatchpatch.DiffDelete &&
-			in[i+1].Type == diffmatchpatch.DiffEqual &&
-			in[i+2].Type == diffmatchpatch.DiffDelete &&
-			strings.HasSuffix(in[i+2].Text, in[i+1].Text) {
-			out = append(out,
-				diffmatchpatch.Diff{diffmatchpatch.DiffDelete, d.Text + in[i+2].Text[:len(in[i+2].Text)-len(in[i+1].Text)]},
-				in[i+1])
-			i += 2
-			continue
-		}
 		// [=AB,insCB,=D] => [=A,insBC,=BD]
 		// and
 		// [=AB,delCB,=D] => [=A,delBC,=BD]
@@ -271,7 +258,6 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 			in[i+1].Type != diffmatchpatch.DiffEqual &&
 			in[i+2].Type == diffmatchpatch.DiffEqual &&
 			len(d.Text) > 0 && len(in[i+1].Text) > 0 &&
-			d.Text[len(d.Text)-1] == in[i+1].Text[len(in[i+1].Text)-1] &&
 			!(i+3 < len(in) &&
 				// Except: leave deletion alone if an
 				// upcoming insertion will be moved up
@@ -296,6 +282,11 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 				d.Text[len(d.Text)-x:]+
 					in[i+1].Text[:len(in[i+1].Text)-x],
 				in[i+1].Text[len(in[i+1].Text)-x:]+in[i+2].Text
+		}
+		// [=X,delAX] => [delXA,=X]
+		if i < len(in)-1 &&
+			d.Type == diffmatchpatch.DiffEqual &&
+			in[i+1].Type == diffmatchpatch.DiffDelete && false {
 		}
 		out = append(out, d)
 	}

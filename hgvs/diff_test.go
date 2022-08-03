@@ -193,9 +193,9 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			expect: []string{"2_3insGT"},
 		},
 		{
-			a:      "aGACGGACAGGGCCCgg",
-			b:      "agg",
-			expect: []string{"3_15del"},
+			a:      "aGACGGACAGGGCCCggatgcaa",
+			b:      "aggatgcaa",
+			expect: []string{"2_15del"},
 		},
 		{
 			a:      "aggGac",
@@ -223,14 +223,25 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			expect: []string{"1_2insTTCG"},
 		},
 		{
-			a:      "tcAACaggg",
-			b:      "tcaggg",
+			a:      "tCAACAggg",
+			b:      "tCAggg",
 			expect: []string{"2_4del"},
+		},
+		{
+			a:      "caaAc",
+			b:      "caaCc",
+			expect: []string{"4A>C"},
+		},
+		{
+			a:      "aGGgaca",
+			b:      "agaca",
+			expect: []string{"2_3del"},
 		},
 	} {
 		c.Log(trial)
 		var vars []string
 		diffs, _ := Diff(strings.ToUpper(trial.a), strings.ToUpper(trial.b), 0)
+		c.Logf("%v", diffs)
 		for _, v := range diffs {
 			vars = append(vars, v.String())
 		}
