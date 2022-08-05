@@ -269,6 +269,12 @@ func cleanup(in []diffmatchpatch.Diff) (out []diffmatchpatch.Diff) {
 				in[i+1].Type == diffmatchpatch.DiffDelete &&
 				in[i+3].Type == diffmatchpatch.DiffInsert &&
 				strings.HasSuffix(in[i+3].Text, in[i+2].Text)) {
+			if i+3 < len(in) && in[i+1].Type == in[i+3].Type && strings.HasSuffix(in[i+3].Text, in[i+2].Text) {
+				// [=AB,delC,=E,delDBE] => [=AB,delCEDB,=E,=]
+				in[i+1], in[i+2], in[i+3] = diffmatchpatch.Diff{in[i+1].Type, in[i+1].Text + in[i+2].Text + in[i+3].Text[:len(in[i+3].Text)-len(in[i+2].Text)]},
+					diffmatchpatch.Diff{diffmatchpatch.DiffEqual, in[i+2].Text},
+					diffmatchpatch.Diff{diffmatchpatch.DiffEqual, ""}
+			}
 			// Find x, length of common suffix B
 			x := 1
 			for ; x <= len(d.Text) && x <= len(in[i+1].Text); x++ {

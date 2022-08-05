@@ -198,6 +198,26 @@ func (s *diffSuite) TestDiff(c *check.C) {
 			expect: []string{"2_15del"},
 		},
 		{
+			a:      "aGACGGACAGGGCCCgt",
+			b:      "agt",
+			expect: []string{"2_15del"},
+		},
+		{
+			a:      "aGACGGACAGGGCCCgacggacagggccctag",
+			b:      "agacggacagggccctag",
+			expect: []string{"2_15del"},
+		},
+		{
+			a:      "cagacggacgtggggacccaGACGGACAGGGCCCggtaacc",
+			b:      "cagacggacgtggggacccaggtaacc",
+			expect: []string{"21_34del"},
+		},
+		{
+			a:      "cagacggacgtggggacccaggtaacc",
+			b:      "cagacggacgtggggacccaGACGGACAGGGCCCggtaacc",
+			expect: []string{"20_21insGACGGACAGGGCCC"},
+		},
+		{
 			a:      "aggGac",
 			b:      "aggAac",
 			expect: []string{"4G>A"},
