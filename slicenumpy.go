@@ -72,6 +72,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
 	onehotSingle := flags.Bool("single-onehot", false, "generate one-hot tile-based matrix")
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
+	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
@@ -127,6 +128,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			"-chunked-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsChunked),
 			"-single-onehot=" + fmt.Sprintf("%v", *onehotSingle),
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
+			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
 			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
 			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
@@ -222,7 +224,15 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 		err = fmt.Errorf("fatal: 0 cases, 0 controls, nothing to do")
 		return 1
 	}
-	cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
+	if cmd.filter.MinCoverage == 1 {
+		// In the generic formula below, floating point
+		// arithmetic can effectively push the coverage
+		// threshold above 1.0, which is impossible/useless.
+		// 1.0 needs to mean exactly 100% coverage.
+		cmd.minCoverage = len(cmd.cgnames)
+	} else {
+		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
+	}
 
 	{
 		labelsFilename := *outputDir + "/samples.csv"
@@ -369,7 +379,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 	var onehotIndirect [][2][]uint32 // [chunkIndex][axis][index]
 	var onehotChunkSize []uint32
 	var onehotXrefs [][]onehotXref
-	if *onehotSingle {
+	if *onehotSingle || *onlyPCA {
 		onehotIndirect = make([][2][]uint32, len(infiles))
 		onehotChunkSize = make([]uint32, len(infiles))
 		onehotXrefs = make([][]onehotXref, len(infiles))
@@ -462,6 +472,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			for tag, variants := range seq {
 				tag, variants := tag, variants
 				throttleCPU.Go(func() error {
+					alleleCoverage := 0
 					count := make(map[[blake2b.Size256]byte]int, len(variants))
 
 					rt := reftile[tag]
@@ -475,12 +486,25 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 							v := cg.Variants[idx+allele]
 							if v > 0 && len(variants[v].Sequence) > 0 {
 								count[variants[v].Blake2b]++
+								alleleCoverage++
 							}
 							if v > 0 && tag == cmd.debugTag {
 								log.Printf("tag %d cg %s allele %d tv %d hash %x count is now %d", tag, cgname, allele, v, variants[v].Blake2b[:3], count[variants[v].Blake2b])
 							}
 						}
 					}
+					if alleleCoverage < cmd.minCoverage*2 {
+						idx := int(tag-tagstart) * 2
+						for _, cg := range cgs {
+							cg.Variants[idx] = 0
+							cg.Variants[idx+1] = 0
+						}
+						if tag == cmd.debugTag {
+							log.Printf("tag %d alleleCoverage %d < min %d, sample data wiped", tag, alleleCoverage, cmd.minCoverage*2)
+						}
+						return nil
+					}
+
 					// hash[i] will be the hash of
 					// the variant(s) that should
 					// be at rank i (0-based).
@@ -538,8 +562,13 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			var onehotChunk [][]int8
 			var onehotXref []onehotXref
 
-			annotationsFilename := fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, infileIdx)
-			log.Infof("%04d: writing %s", infileIdx, annotationsFilename)
+			var annotationsFilename string
+			if *onlyPCA {
+				annotationsFilename = "/dev/null"
+			} else {
+				annotationsFilename = fmt.Sprintf("%s/matrix.%04d.annotations.csv", *outputDir, infileIdx)
+				log.Infof("%04d: writing %s", infileIdx, annotationsFilename)
+			}
 			annof, err := os.Create(annotationsFilename)
 			if err != nil {
 				return err
@@ -575,7 +604,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 						maxv = v
 					}
 				}
-				if *onehotChunked || *onehotSingle {
+				if *onehotChunked || *onehotSingle || *onlyPCA {
 					onehot, xrefs := cmd.tv2homhet(cgs, maxv, remap, tag, tagstart, seq)
 					if tag == cmd.debugTag {
 						log.WithFields(logrus.Fields{
@@ -585,6 +614,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 					}
 					onehotChunk = append(onehotChunk, onehot...)
 					onehotXref = append(onehotXref, xrefs...)
+				}
+				if *onlyPCA {
+					outcol++
+					continue
 				}
 				if rt == nil {
 					// Reference does not use any
@@ -604,7 +637,7 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				variantDiffs := make([][]hgvs.Variant, maxv+1)
 				for v, tv := range variants {
 					v := remap[v]
-					if v == rt.variant || done[v] {
+					if v == 0 || v == rt.variant || done[v] {
 						continue
 					} else {
 						done[v] = true
@@ -733,14 +766,14 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 				debug.FreeOSMemory()
 				throttleNumpyMem.Release()
 			}
-			if *onehotSingle {
+			if *onehotSingle || *onlyPCA {
 				onehotIndirect[infileIdx] = onehotChunk2Indirect(onehotChunk)
 				onehotChunkSize[infileIdx] = uint32(len(onehotChunk))
 				onehotXrefs[infileIdx] = onehotXref
 				n := len(onehotIndirect[infileIdx][0])
 				log.Infof("%04d: keeping onehot coordinates in memory (n=%d, mem=%d)", infileIdx, n, n*8*2)
 			}
-			if !(*onehotSingle || *onehotChunked) || *mergeOutput || *hgvsSingle {
+			if !(*onehotSingle || *onehotChunked || *onlyPCA) || *mergeOutput || *hgvsSingle {
 				log.Infof("%04d: preparing numpy (rows=%d, cols=%d)", infileIdx, len(cmd.cgnames), 2*outcol)
 				throttleNumpyMem.Acquire()
 				rows := len(cmd.cgnames)
@@ -1070,7 +1103,10 @@ func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, s
 			return 1
 		}
 	}
-	if !*mergeOutput && !*onehotChunked && !*onehotSingle {
+	if *onlyPCA {
+
+	}
+	if !*mergeOutput && !*onehotChunked && !*onehotSingle && !*onlyPCA {
 		tagoffsetFilename := *outputDir + "/chunk-tag-offset.csv"
 		log.Infof("writing tag offsets to %s", tagoffsetFilename)
 		var f *os.File
