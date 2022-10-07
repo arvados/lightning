@@ -245,7 +245,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 		keepCache = 2
 	}
 	rc := arvados.RuntimeConstraints{
-		API:          &runner.APIAccess,
+		API:          runner.APIAccess,
 		VCPUs:        runner.VCPUs,
 		RAM:          runner.RAM,
 		KeepCacheRAM: (1 << 26) * int64(keepCache) * int64(runner.VCPUs),
