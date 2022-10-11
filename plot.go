@@ -26,8 +26,8 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 	flags.SetOutput(stderr)
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	inputFilename := flags.String("i", "-", "input `file`")
-	sampleCSVFilename := flags.String("labels-csv", "", "use first two columns of `labels.csv` as id->color mapping")
-	sampleFastaDirname := flags.String("sample-fasta-dir", "", "`directory` containing fasta input files")
+	sampleListFilename := flags.String("samples", "", "use second column of `samples.csv` as complete list of sample IDs")
+	colormapFilename := flags.String("colormap", "", "use first two columns of `colormap.csv` as id->color mapping")
 	priority := flags.Int("priority", 500, "container request priority")
 	err = flags.Parse(args)
 	if err == flag.ErrHelp {
@@ -51,12 +51,12 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 			},
 		},
 	}
-	err = runner.TranslatePaths(inputFilename, sampleCSVFilename, sampleFastaDirname)
+	err = runner.TranslatePaths(inputFilename, sampleListFilename, colormapFilename)
 	if err != nil {
 		return 1
 	}
 	runner.Prog = "python3"
-	runner.Args = []string{"/plot.py", *inputFilename, *sampleCSVFilename, *sampleFastaDirname, "/mnt/output/plot.png"}
+	runner.Args = []string{"/plot.py", *inputFilename, *sampleListFilename, *colormapFilename, "/mnt/output/plot.png"}
 	var output string
 	output, err = runner.Run()
 	if err != nil {
@@ -69,6 +69,7 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 var plotscript = `
 import csv
 import os
+import os.path
 import scipy
 import sys
 
@@ -78,13 +79,11 @@ X = scipy.load(infile)
 colors = None
 if sys.argv[2]:
     labels = {}
-    for fnm in os.listdir(sys.argv[3]):
-        if '.2.fasta' not in fnm:
-            labels[fnm] = '---'
-    if len(labels) != len(X):
-        raise "len(inputdir) != len(inputarray)"
-    with open(sys.argv[2], 'rt') as csvfile:
-        for row in csv.reader(csvfile):
+    with open(sys.argv[2], 'rt') as samplelist:
+        for row in csv.reader(samplelist):
+            labels[row[1]] = '---'
+    with open(sys.argv[3], 'rt') as colormap:
+        for row in csv.reader(colormap):
             ident=row[0]
             label=row[1]
             for fnm in labels:
