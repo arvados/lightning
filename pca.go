@@ -199,7 +199,7 @@ func (cmd *goPCA) RunCommand(prog string, args []string, stdin io.Reader, stdout
 	if *outputFilename == "-" {
 		output = nopCloser{stdout}
 	} else {
-		output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_WRONLY, 0777)
+		output, err = os.OpenFile(*outputFilename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0777)
 		if err != nil {
 			return 1
 		}
