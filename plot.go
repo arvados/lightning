@@ -78,17 +78,19 @@ X = scipy.load(infile)
 
 colors = None
 if sys.argv[2]:
+    samples = []
     labels = {}
     with open(sys.argv[2], 'rt') as samplelist:
         for row in csv.reader(samplelist):
-            labels[row[1]] = '---'
+            id = row[1]
+            samples.append(id)
     with open(sys.argv[3], 'rt') as colormap:
         for row in csv.reader(colormap):
-            ident=row[0]
-            label=row[1]
-            for fnm in labels:
-                if row[0] in fnm:
-                    labels[fnm] = row[1]
+            tag = row[0]
+            label = row[1]
+            for id in samples:
+                if tag in id:
+                    labels[id] = label
     colors = []
     labelcolors = {
         'PUR': 'firebrick',
@@ -118,9 +120,9 @@ if sys.argv[2]:
         'GIH': 'blueviolet',
         'PJL': 'blueviolet',
     }
-    for fnm in sorted(labels.keys()):
-        if labels[fnm] in labelcolors:
-            colors.append(labelcolors[labels[fnm]])
+    for id in samples:
+        if (id in labels) and (labels[id] in labelcolors):
+            colors.append(labelcolors[labels[id]])
         else:
             colors.append('black')
 
