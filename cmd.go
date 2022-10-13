@@ -38,8 +38,6 @@ var (
 		"numpy-comvar":       &numpyComVar{},
 		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},
-		"pca-go":             &goPCA{},
-		"pca-py":             &pythonPCA{},
 		"plot":               &pythonPlot{},
 		"diff-fasta":         &diffFasta{},
 		"stats":              &statscmd{},
