@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: AGPL-3.0
 
 import csv
+import numpy
 import os
 import os.path
 import scipy
 import sys
 
 infile = sys.argv[1]
-X = scipy.load(infile)
+X = numpy.load(infile)
 
 colors = None
 if sys.argv[2]:
