@@ -5,11 +5,10 @@
 package lightning
 
 import (
-	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
-var chisquared = distuv.ChiSquared{K: 1, Src: rand.NewSource(rand.Uint64())}
+var chisquared = distuv.ChiSquared{K: 1}
 
 func pvalue(x, y []bool) float64 {
 	var (
