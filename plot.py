@@ -20,15 +20,20 @@ if sys.argv[2]:
             sampleid = row[1]
             samples.append(sampleid)
     phenotype_column = int(sys.argv[4])
-    with open(sys.argv[3], 'rt', newline='') as phenotype:
-        dialect = csv.Sniffer().sniff(phenotype.read(1024))
-        phenotype.seek(0)
-        for row in csv.reader(phenotype, dialect):
-            tag = row[0]
-            label = row[phenotype_column]
-            for sampleid in samples:
-                if tag in sampleid:
-                    labels[sampleid] = label
+    if os.path.isdir(sys.argv[3]):
+        phenotype_files = os.scandir(sys.argv[3])
+    else:
+        phenotype_files = [sys.argv[3]]
+    for phenotype_file in phenotype_files:
+        with open(phenotype_file, 'rt', newline='') as phenotype:
+            dialect = csv.Sniffer().sniff(phenotype.read(1024))
+            phenotype.seek(0)
+            for row in csv.reader(phenotype, dialect):
+                tag = row[0]
+                label = row[phenotype_column]
+                for sampleid in samples:
+                    if tag in sampleid:
+                        labels[sampleid] = label
     colors = []
     labelcolors = {
         'PUR': 'firebrick',
