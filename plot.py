@@ -13,14 +13,16 @@ infile = sys.argv[1]
 X = numpy.load(infile)
 
 colors = None
+category = {}
+samples = []
 if sys.argv[2]:
-    samples = []
     labels = {}
     with open(sys.argv[2], 'rt', newline='') as samplelist:
         for row in csv.reader(samplelist):
             sampleid = row[1]
             samples.append(sampleid)
-    phenotype_column = int(sys.argv[4])
+    phenotype_category_column = int(sys.argv[4])
+    phenotype_column = int(sys.argv[5])
     if os.path.isdir(sys.argv[3]):
         phenotype_files = os.scandir(sys.argv[3])
     else:
@@ -35,6 +37,8 @@ if sys.argv[2]:
                 for sampleid in samples:
                     if tag in sampleid:
                         labels[sampleid] = label
+                        if phenotype_category_column >= 0 and row[phenotype_category_column] != '0':
+                            category[sampleid] = True
     colors = []
     labelcolors = {
         'PUR': 'firebrick',
@@ -68,7 +72,7 @@ if sys.argv[2]:
         'GIH': 'blueviolet',
         'PJL': 'blueviolet',
         '5': 'blueviolet',
-        '6': 'navy',
+        '6': 'black',           # unknown?
     }
     for sampleid in samples:
         if (sampleid in labels) and (labels[sampleid] in labelcolors):
@@ -81,6 +85,22 @@ from matplotlib.patches import Polygon
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 fig = Figure()
 ax = fig.add_subplot(111)
-ax.scatter(X[:,0], X[:,1], c=colors, s=60, marker='o', alpha=0.5)
+for marker in ['o', 'x']:
+    x = []
+    y = []
+    if samples:
+        c = []
+        for i, sampleid in enumerate(samples):
+            if category.get(sampleid, False) == (marker == 'x'):
+                x.append(X[i,0])
+                y.append(X[i,1])
+                c.append(colors[i])
+    elif marker == 'x':
+        continue
+    else:
+        x = X[:,0]
+        y = X[:,1]
+        c = None
+    ax.scatter(x, y, c=c, s=60, marker=marker, alpha=0.5)
 canvas = FigureCanvasAgg(fig)
-canvas.print_figure(sys.argv[5], dpi=80)
+canvas.print_figure(sys.argv[6], dpi=80)
