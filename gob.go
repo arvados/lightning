@@ -59,17 +59,20 @@ func DecodeLibrary(rdr io.Reader, gz bool, cb func(*LibraryEntry) error) error {
 		if err != nil {
 			return err
 		}
+		defer zrdr.Close()
 	}
 	dec := gob.NewDecoder(zrdr)
-	for err == nil {
+	for {
 		var ent LibraryEntry
 		err = dec.Decode(&ent)
-		if err == nil {
-			err = cb(&ent)
+		if err == io.EOF {
+			return zrdr.Close()
+		} else if err != nil {
+			return err
+		}
+		err = cb(&ent)
+		if err != nil {
+			return err
 		}
 	}
-	if err != io.EOF {
-		return err
-	}
-	return zrdr.Close()
 }
