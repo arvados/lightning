@@ -64,6 +64,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	flags.SetOutput(stderr)
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
+	arvadosRAM := flags.Int("arvados-ram", 750000000000, "amount of memory to request for arvados container (`bytes`)")
+	arvadosVCPUs := flags.Int("arvados-vcpus", 96, "number of VCPUs to request for arvados container")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
 	inputDir := flags.String("input-dir", "./in", "input `directory`")
@@ -79,7 +81,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
 	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
-	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
+	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
 	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
@@ -109,8 +111,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			Name:        "lightning slice-numpy",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         750000000000,
-			VCPUs:       96,
+			RAM:         int64(*arvadosRAM),
+			VCPUs:       *arvadosVCPUs,
 			Priority:    *priority,
 			KeepCache:   2,
 			APIAccess:   true,
