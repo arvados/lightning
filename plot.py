@@ -39,6 +39,7 @@ if sys.argv[2]:
                         labels[sampleid] = label
                         if phenotype_category_column >= 0 and row[phenotype_category_column] != '0':
                             category[sampleid] = True
+    unknown_color = 'grey'
     colors = []
     labelcolors = {
         'PUR': 'firebrick',
@@ -51,7 +52,7 @@ if sys.argv[2]:
         'CEU': 'green',
         'GBR': 'green',
         'FIN': 'green',
-        '2': 'green',
+        '5': 'green',
         'LWK': 'coral',
         'MSL': 'coral',
         'GWD': 'coral',
@@ -59,26 +60,25 @@ if sys.argv[2]:
         'ESN': 'coral',
         'ACB': 'coral',
         'ASW': 'coral',
-        '3': 'coral',
+        '4': 'coral',
         'KHV': 'royalblue',
         'CDX': 'royalblue',
         'CHS': 'royalblue',
         'CHB': 'royalblue',
         'JPT': 'royalblue',
-        '4': 'royalblue',
+        '2': 'royalblue',
         'STU': 'blueviolet',
         'ITU': 'blueviolet',
         'BEB': 'blueviolet',
         'GIH': 'blueviolet',
         'PJL': 'blueviolet',
-        '5': 'blueviolet',
-        '6': 'black',           # unknown?
+        '3': 'navy',
     }
     for sampleid in samples:
         if (sampleid in labels) and (labels[sampleid] in labelcolors):
             colors.append(labelcolors[labels[sampleid]])
         else:
-            colors.append('black')
+            colors.append(unknown_color)
 
 from matplotlib.figure import Figure
 from matplotlib.patches import Polygon
@@ -90,11 +90,13 @@ for marker in ['o', 'x']:
     y = []
     if samples:
         c = []
-        for i, sampleid in enumerate(samples):
-            if category.get(sampleid, False) == (marker == 'x'):
-                x.append(X[i,0])
-                y.append(X[i,1])
-                c.append(colors[i])
+        for unknownfirst in [True, False]:
+            for i, sampleid in enumerate(samples):
+                if ((colors[i] == unknown_color) == unknownfirst and
+                    category.get(sampleid, False) == (marker == 'x')):
+                    x.append(X[i,0])
+                    y.append(X[i,1])
+                    c.append(colors[i])
     elif marker == 'x':
         continue
     else:
