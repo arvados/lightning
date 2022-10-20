@@ -9,35 +9,44 @@ import os.path
 import scipy
 import sys
 
-infile = sys.argv[1]
-X = numpy.load(infile)
+(_,
+ input_path,
+ x_component,
+ y_component,
+ samples_file,
+ phenotype_path,
+ phenotype_cat1_column,
+ phenotype_cat2_column,
+ output_path,
+ ) = sys.argv
+X = numpy.load(input_path)
 
 colors = None
 category = {}
 samples = []
-if sys.argv[2]:
+if samples_file:
     labels = {}
-    with open(sys.argv[2], 'rt', newline='') as samplelist:
+    with open(samples_file, 'rt', newline='') as samplelist:
         for row in csv.reader(samplelist):
             sampleid = row[1]
             samples.append(sampleid)
-    phenotype_category_column = int(sys.argv[4])
-    phenotype_column = int(sys.argv[5])
-    if os.path.isdir(sys.argv[3]):
-        phenotype_files = os.scandir(sys.argv[3])
+    phenotype_cat2_column = int(phenotype_cat2_column)
+    phenotype_cat1_column = int(phenotype_cat1_column)
+    if os.path.isdir(phenotype_path):
+        phenotype_files = os.scandir(phenotype_path)
     else:
-        phenotype_files = [sys.argv[3]]
+        phenotype_files = [phenotype_path]
     for phenotype_file in phenotype_files:
         with open(phenotype_file, 'rt', newline='') as phenotype:
             dialect = csv.Sniffer().sniff(phenotype.read(1024))
             phenotype.seek(0)
             for row in csv.reader(phenotype, dialect):
                 tag = row[0]
-                label = row[phenotype_column]
+                label = row[phenotype_cat1_column]
                 for sampleid in samples:
                     if tag in sampleid:
                         labels[sampleid] = label
-                        if phenotype_category_column >= 0 and row[phenotype_category_column] != '0':
+                        if phenotype_cat2_column >= 0 and row[phenotype_cat2_column] != '0':
                             category[sampleid] = True
     unknown_color = 'grey'
     colors = []
@@ -94,15 +103,15 @@ for marker in ['o', 'x']:
             for i, sampleid in enumerate(samples):
                 if ((colors[i] == unknown_color) == unknownfirst and
                     category.get(sampleid, False) == (marker == 'x')):
-                    x.append(X[i,0])
-                    y.append(X[i,1])
+                    x.append(X[i,int(x_component)-1])
+                    y.append(X[i,int(y_component)-1])
                     c.append(colors[i])
     elif marker == 'x':
         continue
     else:
-        x = X[:,0]
-        y = X[:,1]
+        x = X[:,int(x_component)-1]
+        y = X[:,int(y_component)-1]
         c = None
     ax.scatter(x, y, c=c, s=60, marker=marker, alpha=0.5)
 canvas = FigureCanvasAgg(fig)
-canvas.print_figure(sys.argv[6], dpi=80)
+canvas.print_figure(output_path, dpi=80)

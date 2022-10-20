@@ -35,8 +35,10 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 	outputFilename := flags.String("o", "", "output `filename` (e.g., './plot.png')")
 	sampleListFilename := flags.String("samples", "", "use second column of `samples.csv` as complete list of sample IDs")
 	phenotypeFilename := flags.String("phenotype", "", "use `phenotype.csv` as id->phenotype mapping (column 0 is sample id)")
-	phenotypeCategoryColumn := flags.Int("phenotype-category-column", -1, "0-based column `index` of 2nd category in phenotype.csv file")
-	phenotypeColumn := flags.Int("phenotype-column", 1, "0-based column `index` of phenotype in phenotype.csv file")
+	cat1Column := flags.Int("phenotype-cat1-column", 1, "0-based column `index` of 1st category in phenotype.csv file")
+	cat2Column := flags.Int("phenotype-cat2-column", -1, "0-based column `index` of 2nd category in phenotype.csv file")
+	xComponent := flags.Int("x", 1, "1-based PCA component to plot on x axis")
+	yComponent := flags.Int("y", 2, "1-based PCA component to plot on y axis")
 	priority := flags.Int("priority", 500, "container request priority")
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
 	err = flags.Parse(args)
@@ -68,7 +70,16 @@ func (cmd *pythonPlot) RunCommand(prog string, args []string, stdin io.Reader, s
 		}
 		*outputFilename = "/mnt/output/plot.png"
 	}
-	args = []string{*inputFilename, *sampleListFilename, *phenotypeFilename, fmt.Sprintf("%d", *phenotypeCategoryColumn), fmt.Sprintf("%d", *phenotypeColumn), *outputFilename}
+	args = []string{
+		*inputFilename,
+		fmt.Sprintf("%d", *xComponent),
+		fmt.Sprintf("%d", *yComponent),
+		*sampleListFilename,
+		*phenotypeFilename,
+		fmt.Sprintf("%d", *cat1Column),
+		fmt.Sprintf("%d", *cat2Column),
+		*outputFilename,
+	}
 	if *runlocal {
 		if *outputFilename == "" {
 			fmt.Fprintln(stderr, "error: must specify -o filename.png in local mode (or try -help)")
