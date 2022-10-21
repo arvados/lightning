@@ -1125,7 +1125,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			log.Printf("have %d one-hot cols", cols)
 			stride := 1
 			for *maxPCATiles > 0 && cols > *maxPCATiles*2 {
-				cols = cols / 2
+				cols = (cols + 1) / 2
 				stride = stride * 2
 			}
 			log.Printf("creating matrix: %d rows, %d cols, stride %d", len(cmd.cgnames), cols, stride)
