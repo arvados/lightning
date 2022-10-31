@@ -64,6 +64,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	flags.SetOutput(stderr)
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
+	arvadosRAM := flags.Int("arvados-ram", 750000000000, "amount of memory to request for arvados container (`bytes`)")
+	arvadosVCPUs := flags.Int("arvados-vcpus", 96, "number of VCPUs to request for arvados container")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
 	inputDir := flags.String("input-dir", "./in", "input `directory`")
@@ -78,8 +80,9 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
 	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
 	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
+	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
-	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads")
+	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
 	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
@@ -109,8 +112,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			Name:        "lightning slice-numpy",
 			Client:      arvados.NewClientFromEnv(),
 			ProjectUUID: *projectUUID,
-			RAM:         750000000000,
-			VCPUs:       96,
+			RAM:         int64(*arvadosRAM),
+			VCPUs:       *arvadosVCPUs,
 			Priority:    *priority,
 			KeepCache:   2,
 			APIAccess:   true,
@@ -133,6 +136,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
 			"-pca-components=" + fmt.Sprintf("%d", *pcaComponents),
+			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
 			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
@@ -1118,10 +1122,18 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if cols == 0 {
 				return fmt.Errorf("cannot do PCA: one-hot matrix is empty")
 			}
-			log.Printf("creating matrix: %d rows, %d cols", len(cmd.cgnames), cols)
+			log.Printf("have %d one-hot cols", cols)
+			stride := 1
+			for *maxPCATiles > 0 && cols > *maxPCATiles*2 {
+				cols = (cols + 1) / 2
+				stride = stride * 2
+			}
+			log.Printf("creating matrix: %d rows, %d cols, stride %d", len(cmd.cgnames), cols, stride)
 			mtx := mat.NewDense(len(cmd.cgnames), cols, nil)
 			for i, c := range onehot[nzCount:] {
-				mtx.Set(int(onehot[i]), int(c), 1)
+				if int(c/2)%stride == 0 {
+					mtx.Set(int(onehot[i]), int(c/2)/stride*2+int(c)%2, 1)
+				}
 			}
 			log.Print("fitting")
 			transformer := nlp.NewPCA(*pcaComponents)
