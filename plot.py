@@ -28,6 +28,8 @@ if samples_file:
     labels = {}
     with open(samples_file, 'rt', newline='') as samplelist:
         for row in csv.reader(samplelist):
+            if row[0] == "Index":
+                continue
             sampleid = row[1]
             samples.append(sampleid)
     phenotype_cat2_column = int(phenotype_cat2_column)
