@@ -1485,16 +1485,20 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	obs := make([][]bool, (maxv+1)*2) // 2 slices (hom + het) for each variant#
 	for i := range obs {
-		obs[i] = make([]bool, len(cmd.cgnames))
+		obs[i] = make([]bool, cmd.trainingSetSize)
 	}
 	for cgid, name := range cmd.cgnames {
+		tsid := cmd.trainingSet[cgid]
+		if tsid < 0 {
+			continue
+		}
 		cgvars := cgs[name].Variants[tagoffset*2:]
 		tv0, tv1 := remap[cgvars[0]], remap[cgvars[1]]
 		for v := tileVariantID(1); v <= maxv; v++ {
 			if tv0 == v && tv1 == v {
-				obs[v*2][cgid] = true
+				obs[v*2][tsid] = true
 			} else if tv0 == v || tv1 == v {
-				obs[v*2+1][cgid] = true
+				obs[v*2+1][tsid] = true
 			}
 		}
 	}
