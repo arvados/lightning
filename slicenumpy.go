@@ -1265,6 +1265,9 @@ func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, err
 	lineNum := 0
 	for _, csv := range bytes.Split(buf, []byte{'\n'}) {
 		lineNum++
+		if len(csv) == 0 {
+			continue
+		}
 		split := strings.Split(string(csv), ",")
 		if len(split) != 4 {
 			return nil, fmt.Errorf("%d fields != 4 in %s line %d: %q", len(split), samplesFilename, lineNum, csv)
