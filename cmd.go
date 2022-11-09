@@ -44,6 +44,7 @@ var (
 		"merge":              &merger{},
 		"dump":               &dump{},
 		"dumpgob":            &dumpGob{},
+		"choose-samples":     &chooseSamples{},
 	})
 )
 
@@ -58,6 +59,7 @@ func Main() {
 		logrus.StandardLogger().Formatter = &logrus.TextFormatter{DisableTimestamp: true}
 	}
 	if len(os.Args) >= 2 && !strings.HasSuffix(os.Args[1], "version") {
+		// print version (then run subcommand)
 		cmd.Version.RunCommand("lightning", nil, nil, os.Stderr, os.Stderr)
 	}
 	os.Exit(handler.RunCommand(os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr))

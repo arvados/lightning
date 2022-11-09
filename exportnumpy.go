@@ -568,5 +568,6 @@ func trimFilenameForLabel(s string) string {
 	s = strings.TrimSuffix(s, ".2")
 	s = strings.TrimSuffix(s, ".gz")
 	s = strings.TrimSuffix(s, ".vcf")
+	s = strings.Replace(s, ",", "-", -1)
 	return s
 }
