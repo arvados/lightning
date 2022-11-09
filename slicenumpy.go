@@ -39,18 +39,18 @@ import (
 const annotationMaxTileSpan = 100
 
 type sliceNumpy struct {
-	filter                filter
-	threads               int
-	chi2CaseControlColumn string
-	chi2CaseControlFile   string
-	chi2Cases             []bool
-	chi2PValue            float64
-	trainingSet           []int // see loadTrainingSet
-	trainingSetSize       int
-	minCoverage           int
-	cgnames               []string
-	includeVariant1       bool
-	debugTag              tagID
+	filter          filter
+	threads         int
+	chi2Cases       []bool
+	chi2PValue      float64
+	minCoverage     int
+	includeVariant1 bool
+	debugTag        tagID
+
+	cgnames         []string
+	samples         []sampleInfo
+	trainingSet     []int // samples index => training set index, or -1 if not in training set
+	trainingSetSize int
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -81,14 +81,12 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	hgvsChunked := flags.Bool("chunked-hgvs-matrix", false, "also generate hgvs-based matrix per chromosome")
 	onehotSingle := flags.Bool("single-onehot", false, "generate one-hot tile-based matrix")
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
-	trainingSetFilename := flags.String("training-set", "", "`tsv` file with sample IDs to be used for PCA fitting and Χ² test (if not provided, use all samples)")
+	samplesFilename := flags.String("samples", "", "`samples.csv` file with training/validation and case/control groups (see 'lightning choose-samples')")
 	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
 	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
 	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
-	flags.StringVar(&cmd.chi2CaseControlFile, "chi2-case-control-file", "", "tsv file or directory indicating cases and controls for Χ² test (if directory, all .tsv files will be read)")
-	flags.StringVar(&cmd.chi2CaseControlColumn, "chi2-case-control-column", "", "name of case/control column in case-control files for Χ² test (value must be 0 for control, 1 for case)")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
 	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
@@ -105,8 +103,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		}()
 	}
 
-	if cmd.chi2PValue != 1 && (cmd.chi2CaseControlFile == "" || cmd.chi2CaseControlColumn == "") {
-		return fmt.Errorf("cannot use provided -chi2-p-value=%f because -chi2-case-control-file= or -chi2-case-control-column= value is empty", cmd.chi2PValue)
+	if cmd.chi2PValue != 1 && *samplesFilename == "" {
+		return fmt.Errorf("cannot use provided -chi2-p-value=%f because -samples= value is empty", cmd.chi2PValue)
 	}
 
 	cmd.debugTag = tagID(*debugTag)
@@ -122,7 +120,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			KeepCache:   2,
 			APIAccess:   true,
 		}
-		err = runner.TranslatePaths(inputDir, regionsFilename, trainingSetFilename, &cmd.chi2CaseControlFile)
+		err = runner.TranslatePaths(inputDir, regionsFilename, samplesFilename)
 		if err != nil {
 			return err
 		}
@@ -138,12 +136,10 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-chunked-hgvs-matrix=" + fmt.Sprintf("%v", *hgvsChunked),
 			"-single-onehot=" + fmt.Sprintf("%v", *onehotSingle),
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
-			"-training-set=" + *trainingSetFilename,
+			"-samples=" + *samplesFilename,
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
 			"-pca-components=" + fmt.Sprintf("%d", *pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
-			"-chi2-case-control-file=" + cmd.chi2CaseControlFile,
-			"-chi2-case-control-column=" + cmd.chi2CaseControlColumn,
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
 			"-debug-tag=" + fmt.Sprintf("%d", cmd.debugTag),
@@ -179,6 +175,13 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	if err != nil {
 		err = fmt.Errorf("-match-genome: invalid regexp: %q", cmd.filter.MatchGenome)
 		return err
+	}
+
+	if *samplesFilename != "" {
+		cmd.samples, err = cmd.loadSampleInfo(*samplesFilename)
+		if err != nil {
+			return err
+		}
 	}
 
 	cmd.cgnames = nil
@@ -223,23 +226,36 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		return err
 	}
 	taglen := taglib.TagLen()
+	sort.Strings(cmd.cgnames)
 
 	if len(cmd.cgnames) == 0 {
-		err = fmt.Errorf("no genomes found matching regexp %q", cmd.filter.MatchGenome)
-		return err
+		return fmt.Errorf("fatal: 0 matching samples in library, nothing to do")
 	}
-	sort.Strings(cmd.cgnames)
-	err = cmd.useCaseControlFiles()
-	if err != nil {
-		return err
-	}
-	if len(cmd.cgnames) == 0 {
-		err = fmt.Errorf("fatal: 0 cases, 0 controls, nothing to do")
-		return err
-	}
-	err = cmd.loadTrainingSet(*trainingSetFilename)
-	if err != nil {
-		return err
+	cmd.trainingSet = make([]int, len(cmd.cgnames))
+	if *samplesFilename == "" {
+		cmd.trainingSetSize = len(cmd.cgnames)
+		for i, name := range cmd.cgnames {
+			cmd.samples = append(cmd.samples, sampleInfo{
+				id:         trimFilenameForLabel(name),
+				isTraining: true,
+			})
+			cmd.trainingSet[i] = i
+		}
+	} else if len(cmd.cgnames) != len(cmd.samples) {
+		return fmt.Errorf("mismatched sample list: %d samples in library, %d in %s", len(cmd.cgnames), len(cmd.samples), *samplesFilename)
+	} else {
+		cmd.trainingSetSize = 0
+		for i, name := range cmd.cgnames {
+			if s := trimFilenameForLabel(name); s != cmd.samples[i].id {
+				return fmt.Errorf("mismatched sample list: sample %d is %q in library, %q in %s", i, s, cmd.samples[i].id, *samplesFilename)
+			}
+			if cmd.samples[i].isTraining {
+				cmd.trainingSet[i] = cmd.trainingSetSize
+				cmd.trainingSetSize++
+			} else {
+				cmd.trainingSet[i] = -1
+			}
+		}
 	}
 	if cmd.filter.MinCoverage == 1 {
 		// In the generic formula below, floating point
@@ -249,33 +265,6 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cmd.minCoverage = len(cmd.cgnames)
 	} else {
 		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
-	}
-
-	{
-		labelsFilename := *outputDir + "/samples.csv"
-		log.Infof("writing labels to %s", labelsFilename)
-		var f *os.File
-		f, err = os.Create(labelsFilename)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		for i, name := range cmd.cgnames {
-			cc := 0
-			if cmd.chi2Cases != nil && cmd.chi2Cases[i] {
-				cc = 1
-			}
-			_, err = fmt.Fprintf(f, "%d,%q,%d\n", i, trimFilenameForLabel(name), cc)
-			if err != nil {
-				err = fmt.Errorf("write %s: %w", labelsFilename, err)
-				return err
-			}
-		}
-		err = f.Close()
-		if err != nil {
-			err = fmt.Errorf("close %s: %w", labelsFilename, err)
-			return err
-		}
 	}
 
 	log.Info("indexing reference tiles")
@@ -1186,6 +1175,43 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				return err
 			}
 			log.Print("done")
+
+			samplesOutFilename := *outputDir + "/samples.csv"
+			log.Infof("writing sample metadata to %s", samplesOutFilename)
+			var f *os.File
+			f, err = os.Create(samplesOutFilename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			for i, si := range cmd.samples {
+				var cc, tv string
+				if si.isCase {
+					cc = "1"
+				} else if si.isControl {
+					cc = "0"
+				}
+				if si.isTraining {
+					tv = "1"
+				} else {
+					tv = "0"
+				}
+				var pcavals string
+				for c := 0; c < outcols; c++ {
+					pcavals += fmt.Sprintf(",%f", pca.At(i, c))
+				}
+				_, err = fmt.Fprintf(f, "%d,%s,%s,%s%s\n", i, si.id, cc, tv, pcavals)
+				if err != nil {
+					err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
+					return err
+				}
+			}
+			err = f.Close()
+			if err != nil {
+				err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
+				return err
+			}
+			log.Print("done")
 		}
 	}
 	if !*mergeOutput && !*onehotChunked && !*onehotSingle && !*onlyPCA {
@@ -1210,6 +1236,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1281,87 +1308,57 @@ func (cmd *sliceNumpy) loadTrainingSet(path string) error {
 	return nil
 }
 
-// Read case/control files, remove non-case/control entries from
-// cmd.cgnames, and build cmd.chi2Cases.
-func (cmd *sliceNumpy) useCaseControlFiles() error {
-	if cmd.chi2CaseControlFile == "" {
-		return nil
-	}
-	infiles, err := allFiles(cmd.chi2CaseControlFile, nil)
+type sampleInfo struct {
+	id            string
+	isCase        bool
+	isControl     bool
+	isTraining    bool
+	isValidation  bool
+	pcaComponents []float64
+}
+
+// Read samples.csv file with case/control and training/validation
+// flags.
+func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
+	var si []sampleInfo
+	f, err := open(samplesFilename)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// index in cmd.cgnames => case(true) / control(false)
-	cc := map[int]bool{}
-	for _, infile := range infiles {
-		f, err := open(infile)
+	buf, err := io.ReadAll(f)
+	f.Close()
+	if err != nil {
+		return nil, err
+	}
+	lineNum := 0
+	for csv := range bytes.Split(buf, []byte{'\n'}) {
+		lineNum++
+		split := strings.Split(string(csv), ",")
+		if len(split) != 4 {
+			return nil, fmt.Errorf("fields != 4 in %s line %d: %q", samplesFilename, lineNum, csv)
+		}
+		if split[0] == "Index" && split[1] == "SampleID" && split[2] == "CaseControl" && split[3] == "TrainingValidation" {
+			continue
+		}
+		idx, err := strconv.Atoi(split[0])
 		if err != nil {
-			return err
+			if lineNum == 1 {
+				return nil, fmt.Errorf("header does not look right: %q", csv)
+			}
+			return nil, fmt.Errorf("%s line %d: index: %s", samplesFilename, lineNum, err)
 		}
-		buf, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return err
+		if idx != len(si) {
+			return nil, fmt.Errorf("%s line %d: index %d out of order", samplesFilename, lineNum, idx)
 		}
-		ccCol := -1
-		for _, tsv := range bytes.Split(buf, []byte{'\n'}) {
-			if len(tsv) == 0 {
-				continue
-			}
-			split := strings.Split(string(tsv), "\t")
-			if ccCol < 0 {
-				// header row
-				for col, name := range split {
-					if name == cmd.chi2CaseControlColumn {
-						ccCol = col
-						break
-					}
-				}
-				if ccCol < 0 {
-					return fmt.Errorf("%s: no column named %q in header row %q", infile, cmd.chi2CaseControlColumn, tsv)
-				}
-				continue
-			}
-			if len(split) <= ccCol {
-				continue
-			}
-			pattern := split[0]
-			found := -1
-			for i, name := range cmd.cgnames {
-				if strings.Contains(name, pattern) {
-					if found >= 0 {
-						log.Warnf("pattern %q in %s matches multiple genome IDs (%q, %q)", pattern, infile, cmd.cgnames[found], name)
-					}
-					found = i
-					if split[ccCol] == "0" {
-						cc[found] = false
-					}
-					if split[ccCol] == "1" {
-						cc[found] = true
-					}
-				}
-			}
-			if found < 0 {
-				log.Warnf("pattern %q in %s does not match any genome IDs", pattern, infile)
-				continue
-			}
-		}
+		si = append(si, sampleInfo{
+			id:           split[1],
+			isCase:       split[2] == "1",
+			isControl:    split[2] == "0",
+			isTraining:   split[3] == "1",
+			isValidation: split[3] == "0",
+		})
 	}
-	allnames := cmd.cgnames
-	cmd.cgnames = nil
-	cmd.chi2Cases = nil
-	ncases := 0
-	for i, name := range allnames {
-		if cc, ok := cc[i]; ok {
-			cmd.cgnames = append(cmd.cgnames, name)
-			cmd.chi2Cases = append(cmd.chi2Cases, cc)
-			if cc {
-				ncases++
-			}
-		}
-	}
-	log.Printf("%d cases, %d controls, %d neither (dropped)", ncases, len(cmd.cgnames)-ncases, len(allnames)-len(cmd.cgnames))
-	return nil
+	return si, nil
 }
 
 func (cmd *sliceNumpy) filterHGVScolpair(colpair [2][]int8) bool {
