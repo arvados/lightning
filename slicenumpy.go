@@ -82,6 +82,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	onehotSingle := flags.Bool("single-onehot", false, "generate one-hot tile-based matrix")
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
 	samplesFilename := flags.String("samples", "", "`samples.csv` file with training/validation and case/control groups (see 'lightning choose-samples')")
+	caseControlOnly := flags.Bool("case-control-only", false, "drop samples that are not in case/control groups")
 	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
 	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
 	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
@@ -137,6 +138,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-single-onehot=" + fmt.Sprintf("%v", *onehotSingle),
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
 			"-samples=" + *samplesFilename,
+			"-case-control-only=" + fmt.Sprintf("%v", *caseControlOnly),
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
 			"-pca-components=" + fmt.Sprintf("%d", *pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
@@ -182,6 +184,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		if err != nil {
 			return err
 		}
+	} else if *caseControlOnly {
+		return fmt.Errorf("-case-control-only does not make sense without -samples")
 	}
 
 	cmd.cgnames = nil
@@ -244,11 +248,26 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	} else if len(cmd.cgnames) != len(cmd.samples) {
 		return fmt.Errorf("mismatched sample list: %d samples in library, %d in %s", len(cmd.cgnames), len(cmd.samples), *samplesFilename)
 	} else {
-		cmd.trainingSetSize = 0
 		for i, name := range cmd.cgnames {
 			if s := trimFilenameForLabel(name); s != cmd.samples[i].id {
 				return fmt.Errorf("mismatched sample list: sample %d is %q in library, %q in %s", i, s, cmd.samples[i].id, *samplesFilename)
 			}
+		}
+		if *caseControlOnly {
+			for i := 0; i < len(cmd.samples); i++ {
+				if !cmd.samples[i].isTraining && !cmd.samples[i].isValidation {
+					if i+1 < len(cmd.samples) {
+						copy(cmd.samples[i:], cmd.samples[i+1:])
+						copy(cmd.cgnames[i:], cmd.cgnames[i+1:])
+					}
+					cmd.samples = cmd.samples[:len(cmd.samples)-1]
+					cmd.cgnames = cmd.cgnames[:len(cmd.cgnames)-1]
+					i--
+				}
+			}
+		}
+		cmd.trainingSetSize = 0
+		for i := range cmd.cgnames {
 			if cmd.samples[i].isTraining {
 				cmd.trainingSet[i] = cmd.trainingSetSize
 				cmd.trainingSetSize++
@@ -1109,6 +1128,39 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if err != nil {
 				return err
 			}
+
+			samplesOutFilename := *outputDir + "/samples.csv"
+			log.Infof("writing sample metadata to %s", samplesOutFilename)
+			var f *os.File
+			f, err = os.Create(samplesOutFilename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			for i, si := range cmd.samples {
+				var cc, tv string
+				if si.isCase {
+					cc = "1"
+				} else if si.isControl {
+					cc = "0"
+				}
+				if si.isTraining {
+					tv = "1"
+				} else {
+					tv = "0"
+				}
+				_, err = fmt.Fprintf(f, "%d,%s,%s,%s\n", i, si.id, cc, tv)
+				if err != nil {
+					err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
+					return err
+				}
+			}
+			err = f.Close()
+			if err != nil {
+				err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
+				return err
+			}
+			log.Print("done")
 		}
 		if *onlyPCA {
 			cols := 0
