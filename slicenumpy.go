@@ -1240,74 +1240,6 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	return nil
 }
 
-// Read training set file(s) from path (may be dir or file) and set up
-// cmd.trainingSet.
-//
-// cmd.trainingSet[i] == n >= 0 if cmd.cgnames[i] is the nth training
-// set sample.
-//
-// cmd.trainingSet[i] == -1 if cmd.cgnames[i] is not in the training
-// set.
-func (cmd *sliceNumpy) loadTrainingSet(path string) error {
-	cmd.trainingSet = make([]int, len(cmd.cgnames))
-	if path == "" {
-		cmd.trainingSetSize = len(cmd.cgnames)
-		for i := range cmd.trainingSet {
-			cmd.trainingSet[i] = i
-		}
-		return nil
-	}
-	for i := range cmd.trainingSet {
-		cmd.trainingSet[i] = -1
-	}
-	infiles, err := allFiles(path, nil)
-	if err != nil {
-		return err
-	}
-	for _, infile := range infiles {
-		f, err := open(infile)
-		if err != nil {
-			return err
-		}
-		buf, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return err
-		}
-		for _, tsv := range bytes.Split(buf, []byte{'\n'}) {
-			if len(tsv) == 0 {
-				continue
-			}
-			split := strings.Split(string(tsv), "\t")
-			pattern := split[0]
-			found := -1
-			for i, name := range cmd.cgnames {
-				if strings.Contains(name, pattern) {
-					if found >= 0 {
-						log.Warnf("pattern %q in %s already matched sample ID %q -- not using %q", pattern, infile, cmd.cgnames[found], name)
-					} else {
-						found = i
-						cmd.trainingSet[found] = 1
-					}
-				}
-			}
-			if found < 0 {
-				log.Warnf("pattern %q in %s does not match any genome IDs", pattern, infile)
-				continue
-			}
-		}
-	}
-	tsi := 0
-	for i, x := range cmd.trainingSet {
-		if x == 1 {
-			cmd.trainingSet[i] = tsi
-			tsi++
-		}
-	}
-	cmd.trainingSetSize = tsi + 1
-	return nil
-}
-
 type sampleInfo struct {
 	id            string
 	isCase        bool
@@ -1331,11 +1263,14 @@ func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, err
 		return nil, err
 	}
 	lineNum := 0
-	for csv := range bytes.Split(buf, []byte{'\n'}) {
+	for _, csv := range bytes.Split(buf, []byte{'\n'}) {
 		lineNum++
+		if len(csv) == 0 {
+			continue
+		}
 		split := strings.Split(string(csv), ",")
 		if len(split) != 4 {
-			return nil, fmt.Errorf("fields != 4 in %s line %d: %q", samplesFilename, lineNum, csv)
+			return nil, fmt.Errorf("%d fields != 4 in %s line %d: %q", len(split), samplesFilename, lineNum, csv)
 		}
 		if split[0] == "Index" && split[1] == "SampleID" && split[2] == "CaseControl" && split[3] == "TrainingValidation" {
 			continue
@@ -1553,16 +1488,20 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	obs := make([][]bool, (maxv+1)*2) // 2 slices (hom + het) for each variant#
 	for i := range obs {
-		obs[i] = make([]bool, len(cmd.cgnames))
+		obs[i] = make([]bool, cmd.trainingSetSize)
 	}
 	for cgid, name := range cmd.cgnames {
+		tsid := cmd.trainingSet[cgid]
+		if tsid < 0 {
+			continue
+		}
 		cgvars := cgs[name].Variants[tagoffset*2:]
 		tv0, tv1 := remap[cgvars[0]], remap[cgvars[1]]
 		for v := tileVariantID(1); v <= maxv; v++ {
 			if tv0 == v && tv1 == v {
-				obs[v*2][cgid] = true
+				obs[v*2][tsid] = true
 			} else if tv0 == v || tv1 == v {
-				obs[v*2+1][cgid] = true
+				obs[v*2+1][tsid] = true
 			}
 		}
 	}
