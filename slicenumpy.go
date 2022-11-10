@@ -286,6 +286,41 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
 	}
 
+	{
+		samplesOutFilename := *outputDir + "/samples.csv"
+		log.Infof("writing sample metadata to %s", samplesOutFilename)
+		var f *os.File
+		f, err = os.Create(samplesOutFilename)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		for i, si := range cmd.samples {
+			var cc, tv string
+			if si.isCase {
+				cc = "1"
+			} else if si.isControl {
+				cc = "0"
+			}
+			if si.isTraining {
+				tv = "1"
+			} else {
+				tv = "0"
+			}
+			_, err = fmt.Fprintf(f, "%d,%s,%s,%s\n", i, si.id, cc, tv)
+			if err != nil {
+				err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
+				return err
+			}
+		}
+		err = f.Close()
+		if err != nil {
+			err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
+			return err
+		}
+		log.Print("done")
+	}
+
 	log.Info("indexing reference tiles")
 	type reftileinfo struct {
 		variant  tileVariantID
@@ -1133,39 +1168,6 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if err != nil {
 				return err
 			}
-
-			samplesOutFilename := *outputDir + "/samples.csv"
-			log.Infof("writing sample metadata to %s", samplesOutFilename)
-			var f *os.File
-			f, err = os.Create(samplesOutFilename)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			for i, si := range cmd.samples {
-				var cc, tv string
-				if si.isCase {
-					cc = "1"
-				} else if si.isControl {
-					cc = "0"
-				}
-				if si.isTraining {
-					tv = "1"
-				} else {
-					tv = "0"
-				}
-				_, err = fmt.Fprintf(f, "%d,%s,%s,%s\n", i, si.id, cc, tv)
-				if err != nil {
-					err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
-					return err
-				}
-			}
-			err = f.Close()
-			if err != nil {
-				err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
-				return err
-			}
-			log.Print("done")
 		}
 		if *onlyPCA {
 			cols := 0
