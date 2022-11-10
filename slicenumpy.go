@@ -623,6 +623,11 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 					break
 				}
 				remap := variantRemap[tag-tagstart]
+				if remap == nil {
+					// was not assigned above,
+					// because minCoverage
+					continue
+				}
 				maxv := tileVariantID(0)
 				for _, v := range remap {
 					if maxv < v {
