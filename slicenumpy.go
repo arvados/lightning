@@ -1547,22 +1547,30 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	if coverage < cmd.minCoverage {
 		return nil, nil
 	}
+	// "observed" array for p-value calculation (training set
+	// only)
 	obs := make([][]bool, (maxv+1)*2) // 2 slices (hom + het) for each variant#
+	// one-hot output (all samples)
+	outcols := make([][]int8, (maxv+1)*2)
 	for i := range obs {
 		obs[i] = make([]bool, cmd.trainingSetSize)
+		outcols[i] = make([]int8, len(cmd.cgnames))
 	}
 	for cgid, name := range cmd.cgnames {
 		tsid := cmd.trainingSet[cgid]
-		if tsid < 0 {
-			continue
-		}
 		cgvars := cgs[name].Variants[tagoffset*2:]
 		tv0, tv1 := remap[cgvars[0]], remap[cgvars[1]]
 		for v := tileVariantID(1); v <= maxv; v++ {
 			if tv0 == v && tv1 == v {
-				obs[v*2][tsid] = true
+				if tsid >= 0 {
+					obs[v*2][tsid] = true
+				}
+				outcols[v*2][cgid] = 1
 			} else if tv0 == v || tv1 == v {
-				obs[v*2+1][tsid] = true
+				if tsid >= 0 {
+					obs[v*2+1][tsid] = true
+				}
+				outcols[v*2+1][cgid] = 1
 			}
 		}
 	}
@@ -1579,7 +1587,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
 			continue
 		}
-		onehot = append(onehot, bool2int8(obs[col]))
+		onehot = append(onehot, outcols[col])
 		xref = append(xref, onehotXref{
 			tag:     tag,
 			variant: tileVariantID(col >> 1),
@@ -1588,16 +1596,6 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		})
 	}
 	return onehot, xref
-}
-
-func bool2int8(in []bool) []int8 {
-	out := make([]int8, len(in))
-	for i, v := range in {
-		if v {
-			out[i] = 1
-		}
-	}
-	return out
 }
 
 // convert a []onehotXref with length N to a numpy-style []int32
