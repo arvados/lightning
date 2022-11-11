@@ -1187,6 +1187,10 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				cols = (cols + 1) / 2
 				stride = stride * 2
 			}
+			if cols%2 == 1 {
+				// we work with pairs of columns
+				cols++
+			}
 			log.Printf("creating full matrix (%d rows) and training matrix (%d rows) with %d cols, stride %d", len(cmd.cgnames), cmd.trainingSetSize, cols, stride)
 			mtxFull := mat.NewDense(len(cmd.cgnames), cols, nil)
 			mtxTrain := mat.NewDense(cmd.trainingSetSize, cols, nil)
