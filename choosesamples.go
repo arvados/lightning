@@ -55,11 +55,8 @@ func (cmd *chooseSamples) run(prog string, args []string, stdin io.Reader, stdou
 	} else if err != nil {
 		return err
 	}
-	if *caseControlFilename == "" {
-		return errors.New("must provide -case-control-file")
-	}
-	if *caseControlColumn == "" {
-		return errors.New("must provide -case-control-column")
+	if (*caseControlFilename == "") != (*caseControlColumn == "") {
+		return errors.New("must provide both -case-control-file and -case-control-column, or neither")
 	}
 
 	if *pprof != "" {
@@ -221,6 +218,14 @@ func (cmd *chooseSamples) run(prog string, args []string, stdin io.Reader, stdou
 // Read case/control file(s). Returned map m has m[i]==true if
 // sampleIDs[i] is case, m[i]==false if sampleIDs[i] is control.
 func (cmd *chooseSamples) loadCaseControlFiles(path, colname string, sampleIDs []string) (map[int]bool, error) {
+	if path == "" {
+		// all samples are control group
+		cc := make(map[int]bool, len(sampleIDs))
+		for i := range sampleIDs {
+			cc[i] = false
+		}
+		return cc, nil
+	}
 	infiles, err := allFiles(path, nil)
 	if err != nil {
 		return nil, err
