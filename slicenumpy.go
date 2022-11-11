@@ -266,11 +266,13 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				}
 			}
 		}
+		cmd.chi2Cases = nil
 		cmd.trainingSetSize = 0
 		for i := range cmd.cgnames {
 			if cmd.samples[i].isTraining {
 				cmd.trainingSet[i] = cmd.trainingSetSize
 				cmd.trainingSetSize++
+				cmd.chi2Cases = append(cmd.chi2Cases, cmd.samples[i].isCase)
 			} else {
 				cmd.trainingSet[i] = -1
 			}
