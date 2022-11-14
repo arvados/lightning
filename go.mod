@@ -3,7 +3,7 @@ module github.com/arvados/lightning
 go 1.17
 
 require (
-	git.arvados.org/arvados.git v0.0.0-20221006145529-a33307464566
+	git.arvados.org/arvados.git v0.0.0-20221110193247-c80603fb6b95
 	github.com/james-bowman/nlp v0.0.0-20200417075118-1e2772e0e1e5
 	github.com/klauspost/pgzip v1.2.5
 	github.com/kshedden/gonpy v0.0.0-20190510000443-66c21fac4672

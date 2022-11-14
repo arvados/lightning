@@ -24,6 +24,8 @@ cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohl
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 git.arvados.org/arvados.git v0.0.0-20221006145529-a33307464566 h1:X5e6adxfsQuiFsDi8c4avp8z9IXXnHta/oDoyYreZ8A=
 git.arvados.org/arvados.git v0.0.0-20221006145529-a33307464566/go.mod h1:jIxbBvjjUd2UaqgVBtZnL04x8SYwI3b3ruvB1xyyVuE=
+git.arvados.org/arvados.git v0.0.0-20221110193247-c80603fb6b95 h1:+Cu44v2bNsNRDZ6UBmhvUaWr4iBaaNeOuoTZEtDde0g=
+git.arvados.org/arvados.git v0.0.0-20221110193247-c80603fb6b95/go.mod h1:jIxbBvjjUd2UaqgVBtZnL04x8SYwI3b3ruvB1xyyVuE=
 github.com/AdRoll/goamz v0.0.0-20170825154802-2731d20f46f4/go.mod h1:bix3XpsJxNavm6XVKAuEFzG+1W3ORxj7hvbIrFr7Sqs=
 github.com/Azure/azure-sdk-for-go v16.2.1+incompatible/go.mod h1:9XXNKU+eRnpl9moKnB4QOLf1HestfXbmab5FXxiDBjc=
 github.com/Azure/azure-sdk-for-go v45.1.0+incompatible/go.mod h1:9XXNKU+eRnpl9moKnB4QOLf1HestfXbmab5FXxiDBjc=
