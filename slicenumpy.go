@@ -1334,8 +1334,8 @@ func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, err
 			continue
 		}
 		split := strings.Split(string(csv), ",")
-		if len(split) != 4 {
-			return nil, fmt.Errorf("%d fields != 4 in %s line %d: %q", len(split), samplesFilename, lineNum, csv)
+		if len(split) < 4 {
+			return nil, fmt.Errorf("%d fields < 4 in %s line %d: %q", len(split), samplesFilename, lineNum, csv)
 		}
 		if split[0] == "Index" && split[1] == "SampleID" && split[2] == "CaseControl" && split[3] == "TrainingValidation" {
 			continue
