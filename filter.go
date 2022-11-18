@@ -144,6 +144,9 @@ func (cmd *filtercmd) RunCommand(prog string, args []string, stdin io.Reader, st
 		return 0
 	} else if err != nil {
 		return 2
+	} else if flags.NArg() > 0 {
+		err = fmt.Errorf("errant command line arguments after parsed flags: %v", flags.Args())
+		return 2
 	}
 	cmd.output = stdout
 

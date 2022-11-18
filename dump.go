@@ -59,6 +59,8 @@ func (cmd *dump) run(prog string, args []string, stdin io.Reader, stdout, stderr
 		return nil
 	} else if err != nil {
 		return err
+	} else if flags.NArg() > 0 {
+		return fmt.Errorf("errant command line arguments after parsed flags: %v", flags.Args())
 	}
 
 	if *pprof != "" {

@@ -35,8 +35,7 @@ func (cmd *diffFasta) RunCommand(prog string, args []string, stdin io.Reader, st
 		return 0
 	} else if err != nil {
 		return 2
-	}
-	if len(flags.Args()) != 2 {
+	} else if len(flags.Args()) != 2 {
 		err = fmt.Errorf("usage: %s [options] a.fasta b.fasta", prog)
 		return 2
 	}

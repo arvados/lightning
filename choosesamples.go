@@ -54,6 +54,8 @@ func (cmd *chooseSamples) run(prog string, args []string, stdin io.Reader, stdou
 		return nil
 	} else if err != nil {
 		return err
+	} else if flags.NArg() > 0 {
+		return fmt.Errorf("errant command line arguments after parsed flags: %v", flags.Args())
 	}
 	if (*caseControlFilename == "") != (*caseControlColumn == "") {
 		return errors.New("must provide both -case-control-file and -case-control-column, or neither")

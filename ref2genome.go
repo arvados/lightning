@@ -52,6 +52,9 @@ func (cmd *ref2genome) RunCommand(prog string, args []string, stdin io.Reader, s
 	} else if cmd.refFile == "" {
 		err = errors.New("reference data (-ref) not specified")
 		return 2
+	} else if flags.NArg() > 0 {
+		err = fmt.Errorf("errant command line arguments after parsed flags: %v", flags.Args())
+		return 2
 	}
 
 	if *pprof != "" {

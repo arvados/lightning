@@ -97,9 +97,8 @@ func (cmd *exporter) RunCommand(prog string, args []string, stdin io.Reader, std
 		return 0
 	} else if err != nil {
 		return 2
-	}
-	if flag.NArg() > 0 {
-		err = fmt.Errorf("extra unparsed command line arguments: %q", flag.Args())
+	} else if flags.NArg() > 0 {
+		err = fmt.Errorf("errant command line arguments after parsed flags: %v", flags.Args())
 		return 2
 	}
 
