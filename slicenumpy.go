@@ -663,6 +663,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				if remap == nil {
 					// was not assigned above,
 					// because minCoverage
+					outcol++
 					continue
 				}
 				maxv := tileVariantID(0)
