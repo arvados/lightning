@@ -39,6 +39,8 @@ var (
 		"filter":             &filtercmd{},
 		"build-docker-image": &buildDockerImage{},
 		"plot":               &pythonPlot{},
+		"pca-plot":           &pythonPlot{},
+		"manhattan-plot":     &manhattanPlot{},
 		"diff-fasta":         &diffFasta{},
 		"stats":              &statscmd{},
 		"merge":              &merger{},
@@ -78,8 +80,9 @@ func (cmd *buildDockerImage) RunCommand(prog string, args []string, stdin io.Rea
 RUN DEBIAN_FRONTEND=noninteractive \
   apt-get update && \
   apt-get dist-upgrade -y && \
-  apt-get install -y --no-install-recommends bcftools bedtools samtools python2 python3-sklearn python3-matplotlib ca-certificates && \
-  apt-get clean
+  apt-get install -y --no-install-recommends bcftools bedtools samtools python2 python3-sklearn python3-matplotlib python3-pip ca-certificates && \
+  apt-get clean && \
+  pip3 install qmplot
 `), 0644)
 	if err != nil {
 		fmt.Fprint(stderr, err)
