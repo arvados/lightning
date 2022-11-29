@@ -18,8 +18,12 @@ var glmConfig = &glm.Config{
 	ConcurrentIRLS: 1000,
 }
 
-func pvalueGLM(sampleInfo []sampleInfo, onehot []bool) float64 {
-	nPCA := len(sampleInfo[0].pcaComponents)
+// Logistic regression.
+//
+// onehot is the observed outcome, in same order as sampleInfo, but
+// shorter because it only has entries for samples with
+// isTraining==true.
+func pvalueGLM(sampleInfo []sampleInfo, onehot []bool, nPCA int) float64 {
 	pcaNames := make([]string, 0, nPCA)
 	data := make([][]statmodel.Dtype, 0, nPCA)
 	for pca := 0; pca < nPCA; pca++ {
@@ -35,7 +39,8 @@ func pvalueGLM(sampleInfo []sampleInfo, onehot []bool) float64 {
 
 	variant := make([]statmodel.Dtype, 0, len(sampleInfo))
 	outcome := make([]statmodel.Dtype, 0, len(sampleInfo))
-	for row, si := range sampleInfo {
+	row := 0
+	for _, si := range sampleInfo {
 		if si.isTraining {
 			if onehot[row] {
 				variant = append(variant, 1)
@@ -47,6 +52,7 @@ func pvalueGLM(sampleInfo []sampleInfo, onehot []bool) float64 {
 			} else {
 				outcome = append(outcome, 0)
 			}
+			row++
 		}
 	}
 	data = append(data, variant, outcome)

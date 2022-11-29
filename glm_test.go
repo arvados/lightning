@@ -23,7 +23,7 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample4", isCase: true, isTraining: true, pcaComponents: []float64{-4, 1.1, -2}},
 	}, []bool{
 		false, false, true, true,
-	}), check.Equals, 0.09589096738494937)
+	}, 3), check.Equals, 0.09589096738494937)
 
 	c.Check(pvalueGLM([]sampleInfo{
 		{id: "sample1", isCase: false, isTraining: true, pcaComponents: []float64{1, 1.21, 2.37}},
@@ -37,7 +37,7 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample9", isCase: true, isTraining: true, pcaComponents: []float64{3, 1.21, 2.31}},
 	}, []bool{
 		false, false, false, false, false, true, true, true, true,
-	}), check.Equals, 0.001028375654911555)
+	}, 3), check.Equals, 0.001028375654911555)
 
 	c.Check(pvalueGLM([]sampleInfo{
 		{id: "sample1", isCase: false, isTraining: true, pcaComponents: []float64{1.001, -1.01, 2.39}},
@@ -60,8 +60,8 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample18", isCase: true, isTraining: true, pcaComponents: []float64{2.009, 8.10, -2.10}},
 		{id: "sample19", isCase: true, isTraining: true, pcaComponents: []float64{2.010, 8.11, -2.11}},
 	}, []bool{
-		false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true,
-	}), check.Equals, 0.9999944849940106)
+		false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true,
+	}, 3), check.Equals, 0.9999944849940106)
 }
 
 var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {
@@ -87,7 +87,7 @@ var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {
 
 func (s *glmSuite) BenchmarkPvalue(c *check.C) {
 	for i := 0; i < c.N; i++ {
-		p := pvalueGLM(benchSamples, benchOnehot)
+		p := pvalueGLM(benchSamples, benchOnehot, len(benchSamples[0].pcaComponents))
 		c.Check(p, check.Equals, 0.0)
 	}
 }

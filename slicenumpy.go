@@ -43,6 +43,7 @@ type sliceNumpy struct {
 	threads         int
 	chi2Cases       []bool
 	chi2PValue      float64
+	pcaComponents   int
 	minCoverage     int
 	includeVariant1 bool
 	debugTag        tagID
@@ -84,7 +85,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	samplesFilename := flags.String("samples", "", "`samples.csv` file with training/validation and case/control groups (see 'lightning choose-samples')")
 	caseControlOnly := flags.Bool("case-control-only", false, "drop samples that are not in case/control groups")
 	onlyPCA := flags.Bool("pca", false, "run principal component analysis, write components to pca.npy and samples.csv")
-	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
+	flags.IntVar(&cmd.pcaComponents, "pca-components", 4, "number of PCA components to compute / use in logistic regression")
 	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
@@ -142,7 +143,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-samples=" + *samplesFilename,
 			"-case-control-only=" + fmt.Sprintf("%v", *caseControlOnly),
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
-			"-pca-components=" + fmt.Sprintf("%d", *pcaComponents),
+			"-pca-components=" + fmt.Sprintf("%d", cmd.pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
@@ -1207,7 +1208,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				}
 			}
 			log.Print("fitting")
-			transformer := nlp.NewPCA(*pcaComponents)
+			transformer := nlp.NewPCA(cmd.pcaComponents)
 			transformer.Fit(mtxTrain.T())
 			log.Printf("transforming")
 			pca, err := transformer.Transform(mtxFull.T())
@@ -1603,7 +1604,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		}
 		var p float64
 		if len(cmd.samples[0].pcaComponents) > 0 {
-			p = pvalueGLM(cmd.samples, obs[col])
+			p = pvalueGLM(cmd.samples, obs[col], cmd.pcaComponents)
 		} else {
 			p = pvalue(obs[col], cmd.chi2Cases)
 		}
