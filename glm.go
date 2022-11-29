@@ -18,7 +18,7 @@ var glmConfig = &glm.Config{
 	ConcurrentIRLS: 1000,
 }
 
-func pvalueGLM(sampleInfo []sampleInfo, onehotPair [][]bool) float64 {
+func pvalueGLM(sampleInfo []sampleInfo, onehot []bool) float64 {
 	nPCA := len(sampleInfo[0].pcaComponents)
 	pcaNames := make([]string, 0, nPCA)
 	data := make([][]statmodel.Dtype, 0, nPCA)
@@ -37,7 +37,7 @@ func pvalueGLM(sampleInfo []sampleInfo, onehotPair [][]bool) float64 {
 	outcome := make([]statmodel.Dtype, 0, len(sampleInfo))
 	for row, si := range sampleInfo {
 		if si.isTraining {
-			if onehotPair[0][row] {
+			if onehot[row] {
 				variant = append(variant, 1)
 			} else {
 				variant = append(variant, 0)

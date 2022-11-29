@@ -1603,7 +1603,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		}
 		var p float64
 		if len(cmd.samples[0].pcaComponents) > 0 {
-			p = pvalueGLM(cmd.samples, obs[col:col+2])
+			p = pvalueGLM(cmd.samples, obs[col])
 		} else {
 			p = pvalue(obs[col], cmd.chi2Cases)
 		}

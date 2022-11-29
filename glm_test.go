@@ -21,9 +21,8 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample2", isCase: false, isTraining: true, pcaComponents: []float64{7, -1.2, 2}},
 		{id: "sample3", isCase: true, isTraining: true, pcaComponents: []float64{7, -1.2, 2}},
 		{id: "sample4", isCase: true, isTraining: true, pcaComponents: []float64{-4, 1.1, -2}},
-	}, [][]bool{
-		{false, false, true, true},
-		{false, false, true, true},
+	}, []bool{
+		false, false, true, true,
 	}), check.Equals, 0.09589096738494937)
 
 	c.Check(pvalueGLM([]sampleInfo{
@@ -36,9 +35,8 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample7", isCase: true, isTraining: true, pcaComponents: []float64{1, 1.23, 2.36}},
 		{id: "sample8", isCase: true, isTraining: true, pcaComponents: []float64{2, 1.22, 2.32}},
 		{id: "sample9", isCase: true, isTraining: true, pcaComponents: []float64{3, 1.21, 2.31}},
-	}, [][]bool{
-		{false, false, false, false, false, true, true, true, true},
-		{false, false, false, false, false, true, true, true, true},
+	}, []bool{
+		false, false, false, false, false, true, true, true, true,
 	}), check.Equals, 0.001028375654911555)
 
 	c.Check(pvalueGLM([]sampleInfo{
@@ -61,16 +59,15 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		{id: "sample17", isCase: true, isTraining: true, pcaComponents: []float64{2.008, 8.09, -2.09}},
 		{id: "sample18", isCase: true, isTraining: true, pcaComponents: []float64{2.009, 8.10, -2.10}},
 		{id: "sample19", isCase: true, isTraining: true, pcaComponents: []float64{2.010, 8.11, -2.11}},
-	}, [][]bool{
-		{false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true},
-		{false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true},
+	}, []bool{
+		false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true,
 	}), check.Equals, 0.9999944849940106)
 }
 
-var benchSamples, benchOnehot = func() ([]sampleInfo, [][]bool) {
+var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {
 	pcaComponents := 10
 	samples := []sampleInfo{}
-	onehot := make([][]bool, 2)
+	onehot := []bool{}
 	r := make([]float64, pcaComponents)
 	for j := 0; j < 10000; j++ {
 		for i := 0; i < len(r); i++ {
@@ -83,8 +80,7 @@ var benchSamples, benchOnehot = func() ([]sampleInfo, [][]bool) {
 			isTraining:    true,
 			pcaComponents: append([]float64(nil), r...),
 		})
-		onehot[0] = append(onehot[0], j%2 == 0)
-		onehot[1] = append(onehot[1], j%2 == 0)
+		onehot = append(onehot, j%2 == 0)
 	}
 	return samples, onehot
 }()
