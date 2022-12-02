@@ -164,7 +164,7 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 1, 1, 1, 1.23, 2.36
 1, 1, 2, 1.22, 2.32
 1, 1, 3, 1.21, 2.31
-`)), check.Equals, 0.0027896654350661053)
+`)), check.Equals, 0.002789665435066107)
 }
 
 var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {

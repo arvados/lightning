@@ -12,6 +12,7 @@ import (
 
 	"github.com/kshedden/statmodel/glm"
 	"github.com/kshedden/statmodel/statmodel"
+	"gonum.org/v1/gonum/stat"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
@@ -20,6 +21,13 @@ var glmConfig = &glm.Config{
 	FitMethod:      "IRLS",
 	ConcurrentIRLS: 1000,
 	Log:            log.New(io.Discard, "", 0),
+}
+
+func normalize(a []float64) {
+	mean, std := stat.MeanStdDev(a, nil)
+	for i, x := range a {
+		a[i] = (x - mean) / std
+	}
 }
 
 // Logistic regression.
@@ -37,6 +45,7 @@ func pvalueGLM(sampleInfo []sampleInfo, onehot []bool, nPCA int) (p float64) {
 				series = append(series, si.pcaComponents[pca])
 			}
 		}
+		normalize(series)
 		data = append(data, series)
 		pcaNames = append(pcaNames, fmt.Sprintf("pca%d", pca))
 	}
