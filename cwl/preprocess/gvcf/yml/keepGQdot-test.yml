@@ -1,0 +1,9 @@
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+gvcfdir:
+  class: Directory
+  location: keep:47aa578f6360c9dfb10936d21571d6c7+1197
+cutoff: 20
+keepgqdot: true

@@ -1,0 +1,12 @@
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+matchgenome: ""
+libdir:
+  class: Directory
+  location: keep:0eb748be8b4ce392eb405b71199a2ef1+54032
+regions: null
+threads: 10
+mergeoutput: "false"
+expandregions: 0
