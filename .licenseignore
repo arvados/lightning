@@ -3,3 +3,4 @@ AUTHORS
 go.mod
 go.sum
 testdata/*
+readme.md

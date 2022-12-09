@@ -1,0 +1,23 @@
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+sampleid: "A-PRHS-PR000971-BL-COL-47620BL1"
+vcf:
+  class: File
+  location: keep:ebd528706c3192b77e56ebe93361194e+553/A-PRHS-PR000971-BL-COL-47620BL1_varonly.vcf.gz
+nocallbed:
+  class: File
+  location: keep:ebd528706c3192b77e56ebe93361194e+553/A-PRHS-PR000971-BL-COL-47620BL1_nocall.bed
+lightningvcf:
+  class: File
+  location: keep:4626bd8ca6b3ed8f1ef32dfd46815505+378/GRCh38.86_library_snpeff_dbsnp_gnomad.vcf.gz
+sdf:
+  class: Directory
+  location: keep:88c64c60daf829f30187fbcb423a46fc+1355/hg38
+bashscript:
+  class: File
+  location: ../src/change-GT.sh
+header:
+  class: File
+  location: keep:73394b577d9109cd266f5facfbd1e000+54/header

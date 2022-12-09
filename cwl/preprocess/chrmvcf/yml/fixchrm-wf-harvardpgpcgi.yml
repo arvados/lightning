@@ -1,0 +1,10 @@
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+vcfdir:
+  class: Directory
+  location: keep:61ee4a11243384b7f7dfc76291edcab8+85964
+filterjs:
+  class: File
+  location: ../change_gt_M.js

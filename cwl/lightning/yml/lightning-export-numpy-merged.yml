@@ -1,0 +1,8 @@
+# Copyright (C) The Lightning Authors. All rights reserved.
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+lib:
+  class: File
+  location: keep:921ce01c909acc0068b820ca48d3fcde+1542/library.gob.gz
+chunks: 1
