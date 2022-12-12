@@ -183,7 +183,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	}
 
 	if *samplesFilename != "" {
-		cmd.samples, err = cmd.loadSampleInfo(*samplesFilename)
+		cmd.samples, err = loadSampleInfo(*samplesFilename)
 		if err != nil {
 			return err
 		}
@@ -1320,7 +1320,7 @@ type sampleInfo struct {
 
 // Read samples.csv file with case/control and training/validation
 // flags.
-func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
+func loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
 	var si []sampleInfo
 	f, err := open(samplesFilename)
 	if err != nil {
