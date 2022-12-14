@@ -52,6 +52,7 @@ type sliceNumpy struct {
 	samples         []sampleInfo
 	trainingSet     []int // samples index => training set index, or -1 if not in training set
 	trainingSetSize int
+	pvalue          func(onehot []bool) float64
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -187,6 +188,9 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		if err != nil {
 			return err
 		}
+		if len(cmd.samples[0].pcaComponents) > 0 {
+			cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
+		}
 	} else if *caseControlOnly {
 		return fmt.Errorf("-case-control-only does not make sense without -samples")
 	}
@@ -279,6 +283,9 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			} else {
 				cmd.trainingSet[i] = -1
 			}
+		}
+		cmd.pvalue = func(onehot []bool) float64 {
+			return pvalue(onehot, cmd.chi2Cases)
 		}
 	}
 	if cmd.filter.MinCoverage == 1 {
@@ -1602,12 +1609,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
-		var p float64
-		if len(cmd.samples[0].pcaComponents) > 0 {
-			p = pvalueGLM(cmd.samples, obs[col], cmd.pcaComponents)
-		} else {
-			p = pvalue(obs[col], cmd.chi2Cases)
-		}
+		p := cmd.pvalue(obs[col])
 		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
 			continue
 		}
