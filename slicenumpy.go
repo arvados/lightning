@@ -43,6 +43,7 @@ type sliceNumpy struct {
 	threads         int
 	chi2Cases       []bool
 	chi2PValue      float64
+	pcaComponents   int
 	minCoverage     int
 	includeVariant1 bool
 	debugTag        tagID
@@ -83,12 +84,12 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	onehotChunked := flags.Bool("chunked-onehot", false, "generate one-hot tile-based matrix per input chunk")
 	samplesFilename := flags.String("samples", "", "`samples.csv` file with training/validation and case/control groups (see 'lightning choose-samples')")
 	caseControlOnly := flags.Bool("case-control-only", false, "drop samples that are not in case/control groups")
-	onlyPCA := flags.Bool("pca", false, "generate pca matrix")
-	pcaComponents := flags.Int("pca-components", 4, "number of PCA components")
+	onlyPCA := flags.Bool("pca", false, "run principal component analysis, write components to pca.npy and samples.csv")
+	flags.IntVar(&cmd.pcaComponents, "pca-components", 4, "number of PCA components to compute / use in logistic regression")
 	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
-	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test and omit columns with p-value above this threshold")
+	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test (or logistic regression if -samples file has PCA components) and omit columns with p-value above this threshold")
 	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
 	err := flags.Parse(args)
@@ -142,7 +143,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-samples=" + *samplesFilename,
 			"-case-control-only=" + fmt.Sprintf("%v", *caseControlOnly),
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
-			"-pca-components=" + fmt.Sprintf("%d", *pcaComponents),
+			"-pca-components=" + fmt.Sprintf("%d", cmd.pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
@@ -182,7 +183,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	}
 
 	if *samplesFilename != "" {
-		cmd.samples, err = cmd.loadSampleInfo(*samplesFilename)
+		cmd.samples, err = loadSampleInfo(*samplesFilename)
 		if err != nil {
 			return err
 		}
@@ -1207,7 +1208,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				}
 			}
 			log.Print("fitting")
-			transformer := nlp.NewPCA(*pcaComponents)
+			transformer := nlp.NewPCA(cmd.pcaComponents)
 			transformer.Fit(mtxTrain.T())
 			log.Printf("transforming")
 			pca, err := transformer.Transform(mtxFull.T())
@@ -1319,7 +1320,7 @@ type sampleInfo struct {
 
 // Read samples.csv file with case/control and training/validation
 // flags.
-func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
+func loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
 	var si []sampleInfo
 	f, err := open(samplesFilename)
 	if err != nil {
@@ -1353,12 +1354,23 @@ func (cmd *sliceNumpy) loadSampleInfo(samplesFilename string) ([]sampleInfo, err
 		if idx != len(si) {
 			return nil, fmt.Errorf("%s line %d: index %d out of order", samplesFilename, lineNum, idx)
 		}
+		var pcaComponents []float64
+		if len(split) > 4 {
+			for _, s := range split[4:] {
+				f, err := strconv.ParseFloat(s, 64)
+				if err != nil {
+					return nil, fmt.Errorf("%s line %d: cannot parse float %q: %s", samplesFilename, lineNum, s, err)
+				}
+				pcaComponents = append(pcaComponents, f)
+			}
+		}
 		si = append(si, sampleInfo{
-			id:           split[1],
-			isCase:       split[2] == "1",
-			isControl:    split[2] == "0",
-			isTraining:   split[3] == "1",
-			isValidation: split[3] == "0",
+			id:            split[1],
+			isCase:        split[2] == "1",
+			isControl:     split[2] == "0",
+			isTraining:    split[3] == "1",
+			isValidation:  split[3] == "0",
+			pcaComponents: pcaComponents,
 		})
 	}
 	return si, nil
@@ -1590,7 +1602,12 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
-		p := pvalue(obs[col], cmd.chi2Cases)
+		var p float64
+		if len(cmd.samples[0].pcaComponents) > 0 {
+			p = pvalueGLM(cmd.samples, obs[col], cmd.pcaComponents)
+		} else {
+			p = pvalue(obs[col], cmd.chi2Cases)
+		}
 		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
 			continue
 		}
