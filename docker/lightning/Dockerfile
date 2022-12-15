@@ -2,8 +2,11 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
+# build instruction:
+# docker build -t dockername --file=/path/to/lightning/docker/lightning/Dockerfile /path/to/lightning
+
 FROM ubuntu:latest
-MAINTAINER Jiayong Li <jli@curii.com>
+MAINTAINER Jiayong Li <jli@curii.com>s
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -41,7 +44,5 @@ ENV PATH $PATH:/usr/local/go/bin:/root/go/bin
 
 # Getting lightning
 
-RUN git clone https://github.com/arvados/lightning && \
-    cd lightning && make
-
-WORKDIR /
+COPY . /lightning
+RUN cd /lightning && make && cd / && rm -rf lightning
