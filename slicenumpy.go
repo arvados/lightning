@@ -284,8 +284,10 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				cmd.trainingSet[i] = -1
 			}
 		}
-		cmd.pvalue = func(onehot []bool) float64 {
-			return pvalue(onehot, cmd.chi2Cases)
+		if cmd.pvalue == nil {
+			cmd.pvalue = func(onehot []bool) float64 {
+				return pvalue(onehot, cmd.chi2Cases)
+			}
 		}
 	}
 	if cmd.filter.MinCoverage == 1 {
