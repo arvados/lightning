@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -53,6 +54,7 @@ type sliceNumpy struct {
 	trainingSet     []int // samples index => training set index, or -1 if not in training set
 	trainingSetSize int
 	pvalue          func(onehot []bool) float64
+	pvalueCallCount int64
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -1195,6 +1197,17 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if err != nil {
 				return err
 			}
+			fnm = fmt.Sprintf("%s/stats.json", *outputDir)
+			j, err := json.Marshal(map[string]interface{}{
+				"pvalueCallCount": cmd.pvalueCallCount,
+			})
+			if err != nil {
+				return err
+			}
+			err = os.WriteFile(fnm, j, 0777)
+			if err != nil {
+				return err
+			}
 		}
 		if *onlyPCA {
 			cols := 0
@@ -1623,6 +1636,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
+		atomic.AddInt64(&cmd.pvalueCallCount, 1)
 		p := cmd.pvalue(obs[col])
 		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
 			continue
