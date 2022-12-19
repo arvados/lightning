@@ -201,6 +201,7 @@ type arvadosContainerRunner struct {
 	Mounts      map[string]map[string]interface{}
 	Priority    int
 	KeepCache   int // cache buffers per VCPU (0 for default)
+	Preemptible bool
 }
 
 func (runner *arvadosContainerRunner) Run() (string, error) {
@@ -269,7 +270,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 			"priority":            runner.Priority,
 			"state":               arvados.ContainerRequestStateCommitted,
 			"scheduling_parameters": arvados.SchedulingParameters{
-				Preemptible: false,
+				Preemptible: runner.Preemptible,
 				Partitions:  []string{},
 			},
 			"environment": map[string]string{

@@ -40,6 +40,7 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
+	preemptible := flags.Bool("preemptible", true, "request preemptible instance")
 	outputDir := flags.String("output-dir", "./out", "output `directory`")
 	tagsPerFile := flags.Int("tags-per-file", 50000, "tags per file (nfiles will be ~10M÷x)")
 	err = flags.Parse(args)
@@ -71,6 +72,7 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 			Priority:    *priority,
 			KeepCache:   2,
 			APIAccess:   true,
+			Preemptible: *preemptible,
 		}
 		for i := range inputDirs {
 			err = runner.TranslatePaths(&inputDirs[i])

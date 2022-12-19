@@ -75,6 +75,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	arvadosVCPUs := flags.Int("arvados-vcpus", 96, "number of VCPUs to request for arvados container")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
+	preemptible := flags.Bool("preemptible", true, "request preemptible instance")
 	inputDir := flags.String("input-dir", "./in", "input `directory`")
 	outputDir := flags.String("output-dir", "./out", "output `directory`")
 	ref := flags.String("ref", "", "reference name (if blank, choose last one that appears in input)")
@@ -126,6 +127,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			Priority:    *priority,
 			KeepCache:   2,
 			APIAccess:   true,
+			Preemptible: *preemptible,
 		}
 		err = runner.TranslatePaths(inputDir, regionsFilename, samplesFilename)
 		if err != nil {
