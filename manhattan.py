@@ -36,11 +36,22 @@ for dirent in os.scandir(input_path):
                     tilepos[int(annotation[0])] = (annotation[4], int(annotation[5]))
 
 series = {"#CHROM": [], "POS": [], "P": []}
-for tag, chrpos in sorted(tilepos.items(), key=lambda item: (item[1][0].lstrip('chr').zfill(2), item[1][1])):
+for tag, chrpos in sorted(tilepos.items(), key=lambda item: (item[1][0][-1] > '9', item[1][0].lstrip('chr').zfill(2), item[1][1])):
     for p in pvalue.get(tag, []):
         series["#CHROM"].append(chrpos[0])
         series["POS"].append(chrpos[1])
         series["P"].append(p)
 
-qmplot.manhattanplot(data=pandas.DataFrame(series))
-matplotlib.pyplot.savefig(output_path)
+qmplot.manhattanplot(data=pandas.DataFrame(series),
+                     suggestiveline=2e-10,  # Turn off suggestiveline
+                     genomewideline=2e-11,  # Turn off genomewidel
+                     sign_line_cols=["#D62728", "#2CA02C"],
+                     marker=".",
+                     alpha = 0.6,
+                     hline_kws={"linestyle": "--", "lw": 1.3},
+                     title="Tile Variant Manhattan Plot",
+                     # xtick_label_set=xtick,
+                     xlabel="Chromosome",
+                     ylabel=r"$-log_{10}{(P)}$",
+                     xticklabel_kws={"rotation": "vertical"})
+matplotlib.pyplot.savefig(output_path, bbox_inches="tight")

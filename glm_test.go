@@ -174,7 +174,7 @@ func (s *glmSuite) TestPvalueRealDataVsPython(c *check.C) {
 		}
 	}
 
-	pGo := pvalueGLM(samples, onehot, nPCA)
+	pGo := glmPvalueFunc(samples, nPCA)(onehot)
 	c.Logf("pGo = %g", pGo)
 
 	var pydata bytes.Buffer
@@ -263,7 +263,7 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 		return
 	}
 
-	c.Check(pvalueGLM(csv2test(`
+	samples, onehot, npca := csv2test(`
 # case=1, onehot=1, pca1, pca2, pca3
 0, 0, 1, 1.21, 2.37
 0, 0, 2, 1.22, 2.38
@@ -274,7 +274,22 @@ func (s *glmSuite) TestPvalue(c *check.C) {
 1, 1, 1, 1.23, 2.36
 1, 1, 2, 1.22, 2.32
 1, 1, 3, 1.21, 2.31
-`)), check.Equals, 0.002789665435066107)
+`)
+	c.Check(glmPvalueFunc(samples, npca)(onehot), check.Equals, 0.002789665435066107)
+
+	samples, onehot, npca = csv2test(`
+# case=1, onehot=1, pca1, pca2, pca3
+0, 1, 1, 1.21, 2.37
+0, 1, 2, 1.22, 2.38
+0, 1, 3, 1.23, 2.39
+0, 1, 1, 1.24, 2.33
+0, 1, 2, 1.25, 2.34
+1, 1, 3, 1.26, 2.35
+1, 1, 1, 1.23, 2.36
+1, 1, 2, 1.22, 2.32
+1, 1, 3, 1.21, 2.31
+`)
+	c.Check(math.IsNaN(glmPvalueFunc(samples, npca)(onehot)), check.Equals, true)
 }
 
 var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {
@@ -300,7 +315,7 @@ var benchSamples, benchOnehot = func() ([]sampleInfo, []bool) {
 
 func (s *glmSuite) BenchmarkPvalue(c *check.C) {
 	for i := 0; i < c.N; i++ {
-		p := pvalueGLM(benchSamples, benchOnehot, len(benchSamples[0].pcaComponents))
+		p := glmPvalueFunc(benchSamples, len(benchSamples[0].pcaComponents))(benchOnehot)
 		c.Check(p, check.Equals, 0.0)
 	}
 }

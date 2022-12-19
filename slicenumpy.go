@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -52,6 +53,8 @@ type sliceNumpy struct {
 	samples         []sampleInfo
 	trainingSet     []int // samples index => training set index, or -1 if not in training set
 	trainingSetSize int
+	pvalue          func(onehot []bool) float64
+	pvalueCallCount int64
 }
 
 func (cmd *sliceNumpy) RunCommand(prog string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -72,6 +75,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	arvadosVCPUs := flags.Int("arvados-vcpus", 96, "number of VCPUs to request for arvados container")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
+	preemptible := flags.Bool("preemptible", true, "request preemptible instance")
 	inputDir := flags.String("input-dir", "./in", "input `directory`")
 	outputDir := flags.String("output-dir", "./out", "output `directory`")
 	ref := flags.String("ref", "", "reference name (if blank, choose last one that appears in input)")
@@ -123,6 +127,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			Priority:    *priority,
 			KeepCache:   2,
 			APIAccess:   true,
+			Preemptible: *preemptible,
 		}
 		err = runner.TranslatePaths(inputDir, regionsFilename, samplesFilename)
 		if err != nil {
@@ -186,6 +191,21 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cmd.samples, err = loadSampleInfo(*samplesFilename)
 		if err != nil {
 			return err
+		}
+		if len(cmd.samples[0].pcaComponents) > 0 {
+			cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
+			// Unfortunately, statsmodel/glm lib logs
+			// stuff to os.Stdout when it panics on an
+			// unsolvable problem. We recover() from the
+			// panic in glm.go, but we also need to
+			// commandeer os.Stdout to avoid producing
+			// large quantities of logs.
+			stdoutWas := os.Stdout
+			defer func() { os.Stdout = stdoutWas }()
+			os.Stdout, err = os.Open(os.DevNull)
+			if err != nil {
+				return err
+			}
 		}
 	} else if *caseControlOnly {
 		return fmt.Errorf("-case-control-only does not make sense without -samples")
@@ -278,6 +298,11 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				cmd.chi2Cases = append(cmd.chi2Cases, cmd.samples[i].isCase)
 			} else {
 				cmd.trainingSet[i] = -1
+			}
+		}
+		if cmd.pvalue == nil {
+			cmd.pvalue = func(onehot []bool) float64 {
+				return pvalue(onehot, cmd.chi2Cases)
 			}
 		}
 	}
@@ -1174,6 +1199,17 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if err != nil {
 				return err
 			}
+			fnm = fmt.Sprintf("%s/stats.json", *outputDir)
+			j, err := json.Marshal(map[string]interface{}{
+				"pvalueCallCount": cmd.pvalueCallCount,
+			})
+			if err != nil {
+				return err
+			}
+			err = os.WriteFile(fnm, j, 0777)
+			if err != nil {
+				return err
+			}
 		}
 		if *onlyPCA {
 			cols := 0
@@ -1602,12 +1638,8 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
-		var p float64
-		if len(cmd.samples[0].pcaComponents) > 0 {
-			p = pvalueGLM(cmd.samples, obs[col], cmd.pcaComponents)
-		} else {
-			p = pvalue(obs[col], cmd.chi2Cases)
-		}
+		atomic.AddInt64(&cmd.pvalueCallCount, 1)
+		p := cmd.pvalue(obs[col])
 		if cmd.chi2PValue < 1 && !(p < cmd.chi2PValue) {
 			continue
 		}
