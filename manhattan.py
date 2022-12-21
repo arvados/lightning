@@ -14,7 +14,11 @@ import qmplot
 (_,
  input_path,
  output_path,
+ csv_threshold_str,
+ csv_output_path,
  ) = sys.argv
+csv_threshold = float(csv_threshold_str)
+
 columns = numpy.load(os.path.join(input_path, 'onehot-columns.npy'))
 
 # pvalue maps tag# => [pvalue1, pvalue2, ...] (one het p-value and one hom p-value for each tile variant)
@@ -34,6 +38,13 @@ for dirent in os.scandir(input_path):
                 # 500000,0,2,=,chr1,160793649,,,
                 if annotation[3] == "=":
                     tilepos[int(annotation[0])] = (annotation[4], int(annotation[5]))
+
+if csv_threshold > 0 and csv_output_path != "":
+    with open(csv_output_path, 'wt') as f:
+        for tag, chrpos in sorted(tilepos.items(), key=lambda item: (item[1][0][-1] > '9', item[1][0].lstrip('chr').zfill(2), item[1][1])):
+            for p in pvalue.get(tag, []):
+                if p < pow(10, -csv_threshold):
+                    print(f'{tag},{chrpos[0]},{chrpos[1]},{p}', file=f)
 
 series = {"#CHROM": [], "POS": [], "P": []}
 for tag, chrpos in sorted(tilepos.items(), key=lambda item: (item[1][0][-1] > '9', item[1][0].lstrip('chr').zfill(2), item[1][1])):

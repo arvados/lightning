@@ -32,6 +32,8 @@ func (cmd *manhattanPlot) RunCommand(prog string, args []string, stdin io.Reader
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	inputDirectory := flags.String("i", "-", "input `directory` (output of slice-numpy -single-onehot)")
 	outputFilename := flags.String("o", "", "output `filename` (e.g., './plot.png')")
+	csvOutputFilename := flags.String("csv-output", "", "csv output `filename` (e.g., './tile-locations-pvalues.csv')")
+	csvOutputThreshold := flags.Float64("csv-output-threshold", 0, "logpvalue threshold for csv output (0 for none)")
 	priority := flags.Int("priority", 500, "container request priority")
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
 	err = flags.Parse(args)
@@ -65,10 +67,13 @@ func (cmd *manhattanPlot) RunCommand(prog string, args []string, stdin io.Reader
 			return 1
 		}
 		*outputFilename = "/mnt/output/plot.png"
+		*csvOutputFilename = "/mnt/output/tile-locations-pvalues.csv"
 	}
 	args = []string{
 		*inputDirectory,
 		*outputFilename,
+		fmt.Sprintf("%g", *csvOutputThreshold),
+		*csvOutputFilename,
 	}
 	if *runlocal {
 		if *outputFilename == "" {
