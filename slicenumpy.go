@@ -1298,7 +1298,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				}
 				if si.isTraining {
 					tv = "1"
-				} else {
+				} else if si.isValidation {
 					tv = "0"
 				}
 				var pcavals string
