@@ -1289,6 +1289,14 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				return err
 			}
 			defer f.Close()
+			pcaLabels := ""
+			for i := 0; i < outcols; i++ {
+				pcaLabels += fmt.Sprintf(",PCA%d", i)
+			}
+			_, err = fmt.Fprintf(f, "Index,SampleID,CaseControl,TrainingValidation%s\n", pcaLabels)
+			if err != nil {
+				return err
+			}
 			for i, si := range cmd.samples {
 				var cc, tv string
 				if si.isCase {
