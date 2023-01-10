@@ -316,6 +316,13 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
 	}
 
+	// cgnamemap[name]==true for samples that we are including in
+	// output
+	cgnamemap := map[string]bool{}
+	for _, name := range cmd.cgnames {
+		cgnamemap[name] = true
+	}
+
 	{
 		samplesOutFilename := *outputDir + "/samples.csv"
 		log.Infof("writing sample metadata to %s", samplesOutFilename)
@@ -532,7 +539,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 					if cmd.filter.MaxTag >= 0 && cg.StartTag > tagID(cmd.filter.MaxTag) {
 						return errSkip
 					}
-					if !matchGenome.MatchString(cg.Name) {
+					if !cgnamemap[cg.Name] {
 						continue
 					}
 					// pad to full slice size
