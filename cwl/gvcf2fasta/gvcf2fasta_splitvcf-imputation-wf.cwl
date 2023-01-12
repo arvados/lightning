@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
+$namespaces:
+  arv: "http://arvados.org/cwl#"
 cwlVersion: v1.1
 class: Workflow
 label: Impute gVCF and convert to FASTA for gVCF split by chromosome
@@ -11,6 +13,8 @@ requirements:
 hints:
   DockerRequirement:
     dockerPull: vcfutil
+  arv:UsePreemptible:
+    usePreemptible: true
 
 inputs:
   sampleid:

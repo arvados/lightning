@@ -1,8 +1,7 @@
+#!/bin/bash
 # Copyright (C) The Lightning Authors. All rights reserved.
 #
 # SPDX-License-Identifier: AGPL-3.0
-
-#!/bin/bash
 
 set -eo pipefail
 
