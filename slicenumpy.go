@@ -192,21 +192,6 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		if err != nil {
 			return err
 		}
-		if len(cmd.samples[0].pcaComponents) > 0 {
-			cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
-			// Unfortunately, statsmodel/glm lib logs
-			// stuff to os.Stdout when it panics on an
-			// unsolvable problem. We recover() from the
-			// panic in glm.go, but we also need to
-			// commandeer os.Stdout to avoid producing
-			// large quantities of logs.
-			stdoutWas := os.Stdout
-			defer func() { os.Stdout = stdoutWas }()
-			os.Stdout, err = os.Open(os.DevNull)
-			if err != nil {
-				return err
-			}
-		}
 	} else if *caseControlOnly {
 		return fmt.Errorf("-case-control-only does not make sense without -samples")
 	}
@@ -314,6 +299,21 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cmd.minCoverage = len(cmd.cgnames)
 	} else {
 		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
+	}
+
+	if len(cmd.samples[0].pcaComponents) > 0 {
+		cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
+		// Unfortunately, statsmodel/glm lib logs stuff to
+		// os.Stdout when it panics on an unsolvable
+		// problem. We recover() from the panic in glm.go, but
+		// we also need to commandeer os.Stdout to avoid
+		// producing large quantities of logs.
+		stdoutWas := os.Stdout
+		defer func() { os.Stdout = stdoutWas }()
+		os.Stdout, err = os.Open(os.DevNull)
+		if err != nil {
+			return err
+		}
 	}
 
 	// cgnamemap[name]==true for samples that we are including in
