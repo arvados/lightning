@@ -22,7 +22,6 @@ inputs:
   matchgenome: string
   libdir: Directory
   regions: File?
-  threads: int
   mergeoutput: string
   expandregions: int
   samplescsv: File
@@ -51,7 +50,7 @@ arguments:
     valueFrom: $(inputs.regions)
     separate: false
   - prefix: "-threads="
-    valueFrom: $(inputs.threads)
+    valueFrom: "20"
     separate: false
   - prefix: "-merge-output="
     valueFrom: $(inputs.mergeoutput)
@@ -63,5 +62,6 @@ arguments:
     valueFrom: $(inputs.samplescsv)
     separate: false
   - "-single-onehot=true"
-  - "-chi2-p-value=0.01"
+  - "-chi2-p-value=0.000001"
   - "-min-coverage=0.9"
+  - "-case-control-only=true"
