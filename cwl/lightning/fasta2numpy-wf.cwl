@@ -11,6 +11,9 @@ requirements:
   SubworkflowFeatureRequirement: {}
   StepInputExpressionRequirement: {}
   MultipleInputFeatureRequirement: {}
+hints:
+  arv:UsePreemptible:
+    usePreemptible: true
 
 inputs:
   tagset:
@@ -52,19 +55,19 @@ inputs:
   gnomaddir: Directory
   readmeinfo: string[]
 
-outputs:
-  stagednpydir:
-    type: Directory
-    outputSource: stage-output/stagednpydir
-  stagedonehotnpydir:
-    type: Directory
-    outputSource: stage-output/stagedonehotnpydir
-  stagedannotationdir:
-    type: Directory
-    outputSource: stage-output/stagedannotationdir
-  readme:
-    type: File
-    outputSource: genreadme/readme
+outputs: []
+#  stagednpydir:
+#    type: Directory
+#    outputSource: stage-output/stagednpydir
+#  stagedonehotnpydir:
+#    type: Directory
+#    outputSource: stage-output/stagedonehotnpydir
+#  stagedannotationdir:
+#    type: Directory
+#    outputSource: stage-output/stagedannotationdir
+#  readme:
+#    type: File
+#    outputSource: genreadme/readme
 
 steps:
   batch-dirs:
@@ -116,28 +119,38 @@ steps:
       randomseed: randomseed
     out: [samplescsv]
 
-  lightning-slice-numpy:
-    run: lightning-slice-numpy.cwl
-    in:
-      matchgenome: matchgenome
-      libdir: lightning-slice/libdir
-      regions: regions
-      threads: threads
-      mergeoutput: mergeoutput
-      expandregions: expandregions
-      samplescsv: lightning-choose-samples/samplescsv
-    out: [outdir, npys, chunktagoffsetcsv]
+#  lightning-slice-numpy:
+#    run: lightning-slice-numpy.cwl
+#    in:
+#      matchgenome: matchgenome
+#      libdir: lightning-slice/libdir
+#      regions: regions
+#      threads: threads
+#      mergeoutput: mergeoutput
+#      expandregions: expandregions
+#      samplescsv: lightning-choose-samples/samplescsv
+#    out: [outdir, npys, chunktagoffsetcsv]
 
-  lightning-slice-numpy-onehot:
+  lightning-slice-numpy-onehot_chi2:
     run: lightning-slice-numpy-onehot.cwl
     in:
       matchgenome: matchgenome
       libdir: lightning-slice/libdir
       regions: regions
-      threads: threads
       mergeoutput: mergeoutput
       expandregions: expandregions
       samplescsv: lightning-choose-samples/samplescsv
+    out: [outdir, npys]
+
+  lightning-slice-numpy-onehot_logisticregression:
+    run: lightning-slice-numpy-onehot.cwl
+    in:
+      matchgenome: matchgenome
+      libdir: lightning-slice/libdir
+      regions: regions
+      mergeoutput: mergeoutput
+      expandregions: expandregions
+      samplescsv: lightning-slice-numpy-pca/pcasamplescsv
     out: [outdir, npys]
 
   lightning-slice-numpy-pca:
@@ -177,50 +190,50 @@ steps:
         valueFrom: "3"
     out: [png]
 
-  lightning-anno2vcf-onehot:
-    run: lightning-anno2vcf.cwl
-    in:
-      annodir: lightning-slice-numpy-onehot/outdir
-    out: [vcfdir]
+#  lightning-anno2vcf-onehot:
+#    run: lightning-anno2vcf.cwl
+#    in:
+#      annodir: lightning-slice-numpy-onehot/outdir
+#    out: [vcfdir]
 
-  make-libname:
-    run: make-libname.cwl
-    in:
-      matchgenome: matchgenome
-      genomeversion: genomeversion
-    out: [libname]
+#  make-libname:
+#    run: make-libname.cwl
+#    in:
+#      matchgenome: matchgenome
+#      genomeversion: genomeversion
+#    out: [libname]
 
-  annotate-wf:
-    run: ../annotation/annotate-wf.cwl
-    in:
-      sample: make-libname/libname
-      chrs: chrs
-      vcfdir: lightning-anno2vcf-onehot/vcfdir
-      snpeffdatadir: snpeffdatadir
-      genomeversion: genomeversion
-      dbsnp: dbsnp
-      gnomaddir: gnomaddir
-    out: [annotatedvcf, summary]
+#  annotate-wf:
+#    run: ../annotation/annotate-wf.cwl
+#    in:
+#      sample: make-libname/libname
+#      chrs: chrs
+#      vcfdir: lightning-anno2vcf-onehot/vcfdir
+#      snpeffdatadir: snpeffdatadir
+#      genomeversion: genomeversion
+#      dbsnp: dbsnp
+#      gnomaddir: gnomaddir
+#    out: [annotatedvcf, summary]
 
-  stage-output:
-    run: stage-output.cwl
-    in:
-      libname: make-libname/libname
-      npyfiles:
-        source: [lightning-slice-numpy/npys, lightning-slice-numpy/chunktagoffsetcsv]
-        linkMerge: merge_flattened
-      onehotnpyfiles: lightning-slice-numpy-onehot/npys
-      pcapngs:
-        source: [lightning-plot_1-2/png, lightning-plot_2-3/png]
-        linkMerge: merge_flattened
-      bed: lightning-tiling-stats/bed
-      annotatedvcf: annotate-wf/annotatedvcf
-      summary: annotate-wf/summary
-    out: [stagednpydir, stagedonehotnpydir, stagedannotationdir]
+#  stage-output:
+#    run: stage-output.cwl
+#    in:
+#      libname: make-libname/libname
+#      npyfiles:
+#        source: [lightning-slice-numpy/npys, lightning-slice-numpy/chunktagoffsetcsv]
+#        linkMerge: merge_flattened
+#      onehotnpyfiles: lightning-slice-numpy-onehot/npys
+#      pcapngs:
+#        source: [lightning-plot_1-2/png, lightning-plot_2-3/png]
+#        linkMerge: merge_flattened
+#      bed: lightning-tiling-stats/bed
+#      annotatedvcf: annotate-wf/annotatedvcf
+#      summary: annotate-wf/summary
+#    out: [stagednpydir, stagedonehotnpydir, stagedannotationdir]
 
-  genreadme:
-    run: genreadme.cwl
-    in:
-      samplescsv: lightning-choose-samples/samplescsv
-      readmeinfo: readmeinfo
-    out: [readme]
+#  genreadme:
+#    run: genreadme.cwl
+#    in:
+#      samplescsv: lightning-choose-samples/samplescsv
+#      readmeinfo: readmeinfo
+#    out: [readme]
