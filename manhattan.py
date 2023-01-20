@@ -71,6 +71,7 @@ for chrom in chroms.keys():
         xlabel = f'position on {chrom}'
     qmplot.manhattanplot(data=pandas.DataFrame(series),
                          CHR=chrom,
+                         color='#1D2A44,#441D2A',
                          suggestiveline=2e-10,
                          genomewideline=2e-11,
                          sign_line_cols=["#D62728", "#2CA02C"],
