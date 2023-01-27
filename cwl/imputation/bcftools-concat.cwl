@@ -12,7 +12,7 @@ hints:
   ResourceRequirement:
     coresMin: 2
     ramMin: 5000
-    tmpdirMin: 10000
+    tmpdirMin: 2000
 inputs:
   sample: string
   vcfs:

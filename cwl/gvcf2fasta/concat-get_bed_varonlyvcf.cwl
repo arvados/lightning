@@ -12,7 +12,7 @@ hints:
     dockerPull: vcfutil
   ResourceRequirement:
     ramMin: 5000
-    outdirMin: 40000
+    tmpdirMin: 2000
 inputs:
   sampleid:
     type: string
