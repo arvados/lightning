@@ -323,39 +323,9 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 		cgnamemap[name] = true
 	}
 
-	{
-		samplesOutFilename := *outputDir + "/samples.csv"
-		log.Infof("writing sample metadata to %s", samplesOutFilename)
-		var f *os.File
-		f, err = os.Create(samplesOutFilename)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		for i, si := range cmd.samples {
-			var cc, tv string
-			if si.isCase {
-				cc = "1"
-			} else if si.isControl {
-				cc = "0"
-			}
-			if si.isTraining {
-				tv = "1"
-			} else {
-				tv = "0"
-			}
-			_, err = fmt.Fprintf(f, "%d,%s,%s,%s\n", i, si.id, cc, tv)
-			if err != nil {
-				err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
-				return err
-			}
-		}
-		err = f.Close()
-		if err != nil {
-			err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
-			return err
-		}
-		log.Print("done")
+	err = writeSampleInfo(cmd.samples, *outputDir)
+	if err != nil {
+		return err
 	}
 
 	log.Info("indexing reference tiles")
@@ -1288,50 +1258,19 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			}
 			log.Print("done")
 
-			samplesOutFilename := *outputDir + "/samples.csv"
-			log.Infof("writing sample metadata to %s", samplesOutFilename)
-			var f *os.File
-			f, err = os.Create(samplesOutFilename)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			pcaLabels := ""
-			for i := 0; i < outcols; i++ {
-				pcaLabels += fmt.Sprintf(",PCA%d", i)
-			}
-			_, err = fmt.Fprintf(f, "Index,SampleID,CaseControl,TrainingValidation%s\n", pcaLabels)
-			if err != nil {
-				return err
-			}
-			for i, si := range cmd.samples {
-				var cc, tv string
-				if si.isCase {
-					cc = "1"
-				} else if si.isControl {
-					cc = "0"
-				}
-				if si.isTraining {
-					tv = "1"
-				} else if si.isValidation {
-					tv = "0"
-				}
-				var pcavals string
+			log.Print("copying pca components to sampleInfo")
+			for i := range cmd.samples {
+				cmd.samples[i].pcaComponents = make([]float64, outcols)
 				for c := 0; c < outcols; c++ {
-					pcavals += fmt.Sprintf(",%f", pca.At(i, c))
+					cmd.samples[i].pcaComponents[i] = pca.At(i, c)
 				}
-				_, err = fmt.Fprintf(f, "%d,%s,%s,%s%s\n", i, si.id, cc, tv, pcavals)
-				if err != nil {
-					err = fmt.Errorf("write %s: %w", samplesOutFilename, err)
-					return err
-				}
-			}
-			err = f.Close()
-			if err != nil {
-				err = fmt.Errorf("close %s: %w", samplesOutFilename, err)
-				return err
 			}
 			log.Print("done")
+
+			err = writeSampleInfo(cmd.samples, *outputDir)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if !*mergeOutput && !*onehotChunked && !*onehotSingle && !*onlyPCA {
@@ -1420,11 +1359,58 @@ func loadSampleInfo(samplesFilename string) ([]sampleInfo, error) {
 			isCase:        split[2] == "1",
 			isControl:     split[2] == "0",
 			isTraining:    split[3] == "1",
-			isValidation:  split[3] == "0",
+			isValidation:  split[3] == "0" && len(split[2]) > 0, // fix errant 0s in input
 			pcaComponents: pcaComponents,
 		})
 	}
 	return si, nil
+}
+
+func writeSampleInfo(samples []sampleInfo, outputDir string) error {
+	fnm := outputDir + "/samples.csv"
+	log.Infof("writing sample metadata to %s", fnm)
+	f, err := os.Create(fnm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	pcaLabels := ""
+	if len(samples) > 0 {
+		for i := range samples[0].pcaComponents {
+			pcaLabels += fmt.Sprintf(",PCA%d", i)
+		}
+	}
+	_, err = fmt.Fprintf(f, "Index,SampleID,CaseControl,TrainingValidation%s\n", pcaLabels)
+	if err != nil {
+		return err
+	}
+	for i, si := range samples {
+		var cc, tv string
+		if si.isCase {
+			cc = "1"
+		} else if si.isControl {
+			cc = "0"
+		}
+		if si.isTraining {
+			tv = "1"
+		} else if si.isValidation {
+			tv = "0"
+		}
+		var pcavals string
+		for _, pcaval := range si.pcaComponents {
+			pcavals += fmt.Sprintf(",%f", pcaval)
+		}
+		_, err = fmt.Fprintf(f, "%d,%s,%s,%s%s\n", i, si.id, cc, tv, pcavals)
+		if err != nil {
+			return fmt.Errorf("write %s: %w", fnm, err)
+		}
+	}
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf("close %s: %w", fnm, err)
+	}
+	log.Print("done")
+	return nil
 }
 
 func (cmd *sliceNumpy) filterHGVScolpair(colpair [2][]int8) bool {
