@@ -276,6 +276,7 @@ func (runner *arvadosContainerRunner) RunContext(ctx context.Context) (string, e
 			"environment": map[string]string{
 				"GOMAXPROCS": fmt.Sprintf("%d", rc.VCPUs),
 			},
+			"container_count_max": 1,
 		},
 	})
 	if err != nil {
