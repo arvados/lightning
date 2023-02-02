@@ -341,7 +341,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			}
 			if si.isTraining {
 				tv = "1"
-			} else {
+			} else if si.isValidation {
 				tv = "0"
 			}
 			_, err = fmt.Fprintf(f, "%d,%s,%s,%s\n", i, si.id, cc, tv)
