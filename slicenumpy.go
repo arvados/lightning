@@ -44,6 +44,7 @@ type sliceNumpy struct {
 	threads         int
 	chi2Cases       []bool
 	chi2PValue      float64
+	glmMinFrequency float64
 	pcaComponents   int
 	minCoverage     int
 	includeVariant1 bool
@@ -94,6 +95,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test (or logistic regression if -samples file has PCA components) and omit columns with p-value above this threshold")
+	flags.Float64Var(&cmd.glmMinFrequency, "glm-min-frequency", 0.01, "skip GLM calculation on tile variants below this frequency in the training set")
 	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
 	err := flags.Parse(args)
@@ -151,6 +153,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-pca-components=" + fmt.Sprintf("%d", cmd.pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
+			"-glm-min-frequency=" + fmt.Sprintf("%f", cmd.glmMinFrequency),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
 			"-debug-tag=" + fmt.Sprintf("%d", cmd.debugTag),
 		}
@@ -302,7 +305,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	}
 
 	if len(cmd.samples[0].pcaComponents) > 0 {
-		cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
+		cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents, cmd.glmMinFrequency)
 		// Unfortunately, statsmodel/glm lib logs stuff to
 		// os.Stdout when it panics on an unsolvable
 		// problem. We recover() from the panic in glm.go, but
