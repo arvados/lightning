@@ -35,7 +35,7 @@ func normalize(a []float64) {
 // onehot is the observed outcome, in same order as sampleInfo, but
 // shorter because it only has entries for samples with
 // isTraining==true.
-func glmPvalueFunc(sampleInfo []sampleInfo, nPCA int, minFrequency float64) func(onehot []bool) float64 {
+func glmPvalueFunc(sampleInfo []sampleInfo, nPCA int) func(onehot []bool) float64 {
 	pcaNames := make([]string, 0, nPCA)
 	data := make([][]statmodel.Dtype, 0, nPCA)
 	for pca := 0; pca < nPCA; pca++ {
@@ -86,20 +86,15 @@ func glmPvalueFunc(sampleInfo []sampleInfo, nPCA int, minFrequency float64) func
 
 		variant := make([]statmodel.Dtype, 0, len(sampleInfo))
 		row := 0
-		ones := 0
 		for _, si := range sampleInfo {
 			if si.isTraining {
 				if onehot[row] {
 					variant = append(variant, 1)
-					ones++
 				} else {
 					variant = append(variant, 0)
 				}
 				row++
 			}
-		}
-		if float64(ones) < float64(len(variant))*minFrequency {
-			return math.NaN()
 		}
 
 		data := append([][]statmodel.Dtype{data[0], variant}, data[1:]...)
