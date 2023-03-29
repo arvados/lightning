@@ -1564,6 +1564,7 @@ type onehotXref struct {
 	variant tileVariantID
 	hom     bool
 	pvalue  float64
+	maf     float64
 }
 
 const onehotXrefSize = unsafe.Sizeof(onehotXref{})
@@ -1635,6 +1636,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	var onehot [][]int8
 	var xref []onehotXref
+	var maf float64
 	for col := 2; col < len(obs); col++ {
 		// col 0,1 correspond to tile variant 0, i.e.,
 		// no-call; col 2,3 correspond to the most common
@@ -1642,11 +1644,14 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		if col < 4 && !cmd.includeVariant1 {
 			continue
 		}
-		if col&1 == 0 && cmd.pvalueMinFrequency < 1 && homhet2maf(obs[col:col+2]) < cmd.pvalueMinFrequency {
-			// Skip both columns (hom and het) if allele
-			// frequency is below threshold
-			col++
-			continue
+		if col&1 == 0 {
+			maf = homhet2maf(obs[col : col+2])
+			if cmd.pvalueMinFrequency < 1 && maf < cmd.pvalueMinFrequency {
+				// Skip both columns (hom and het) if
+				// allele frequency is below threshold
+				col++
+				continue
+			}
 		}
 		atomic.AddInt64(&cmd.pvalueCallCount, 1)
 		p := cmd.pvalue(obs[col])
@@ -1659,6 +1664,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 			variant: tileVariantID(col >> 1),
 			hom:     col&1 == 0,
 			pvalue:  p,
+			maf:     maf,
 		})
 	}
 	return onehot, xref
@@ -1689,7 +1695,7 @@ func homhet2maf(onehot [][]bool) float64 {
 // P-value row contains 1000000x actual p-value.
 func onehotXref2int32(xrefs []onehotXref) []int32 {
 	xcols := len(xrefs)
-	xdata := make([]int32, 5*xcols)
+	xdata := make([]int32, 6*xcols)
 	for i, xref := range xrefs {
 		xdata[i] = int32(xref.tag)
 		xdata[xcols+i] = int32(xref.variant)
@@ -1698,6 +1704,7 @@ func onehotXref2int32(xrefs []onehotXref) []int32 {
 		}
 		xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
 		xdata[xcols*4+i] = int32(-math.Log10(xref.pvalue) * 1000000)
+		xdata[xcols*5+i] = int32(xref.maf * 1000000)
 	}
 	return xdata
 }
