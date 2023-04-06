@@ -96,6 +96,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test (or logistic regression if -samples file has PCA components) and omit columns with p-value above this threshold")
 	flags.Float64Var(&cmd.pvalueMinFrequency, "pvalue-min-frequency", 0.01, "skip p-value calculation on tile variants below this frequency in the training set")
+	flags.Float64Var(&cmd.maxFrequency, "max-frequency", 1, "do not output variants above this frequency in the training set")
 	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
 	err := flags.Parse(args)
@@ -154,6 +155,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
 			"-pvalue-min-frequency=" + fmt.Sprintf("%f", cmd.pvalueMinFrequency),
+			"-max-frequency=" + fmt.Sprintf("%f", cmd.maxFrequency),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
 			"-debug-tag=" + fmt.Sprintf("%d", cmd.debugTag),
 		}
@@ -1646,9 +1648,15 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 		}
 		if col&1 == 0 {
 			maf = homhet2maf(obs[col : col+2])
-			if cmd.pvalueMinFrequency < 1 && maf < cmd.pvalueMinFrequency {
+			if maf < cmd.pvalueMinFrequency {
 				// Skip both columns (hom and het) if
 				// allele frequency is below threshold
+				col++
+				continue
+			}
+			if maf > cmd.maxFrequency {
+				// Skip both columns if allele
+				// frequency is above threshold
 				col++
 				continue
 			}
