@@ -40,15 +40,15 @@ import (
 const annotationMaxTileSpan = 100
 
 type sliceNumpy struct {
-	filter          filter
-	threads         int
-	chi2Cases       []bool
-	chi2PValue      float64
-	glmMinFrequency float64
-	pcaComponents   int
-	minCoverage     int
-	includeVariant1 bool
-	debugTag        tagID
+	filter             filter
+	threads            int
+	chi2Cases          []bool
+	chi2PValue         float64
+	pvalueMinFrequency float64
+	pcaComponents      int
+	minCoverage        int
+	includeVariant1    bool
+	debugTag           tagID
 
 	cgnames         []string
 	samples         []sampleInfo
@@ -95,7 +95,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test (or logistic regression if -samples file has PCA components) and omit columns with p-value above this threshold")
-	flags.Float64Var(&cmd.glmMinFrequency, "glm-min-frequency", 0.01, "skip GLM calculation on tile variants below this frequency in the training set")
+	flags.Float64Var(&cmd.pvalueMinFrequency, "pvalue-min-frequency", 0.01, "skip p-value calculation on tile variants below this frequency in the training set")
+	flags.Float64Var(&cmd.maxFrequency, "max-frequency", 1, "do not output variants above this frequency in the training set")
 	flags.BoolVar(&cmd.includeVariant1, "include-variant-1", false, "include most common variant when building one-hot matrix")
 	cmd.filter.Flags(flags)
 	err := flags.Parse(args)
@@ -153,7 +154,8 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-pca-components=" + fmt.Sprintf("%d", cmd.pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
 			"-chi2-p-value=" + fmt.Sprintf("%f", cmd.chi2PValue),
-			"-glm-min-frequency=" + fmt.Sprintf("%f", cmd.glmMinFrequency),
+			"-pvalue-min-frequency=" + fmt.Sprintf("%f", cmd.pvalueMinFrequency),
+			"-max-frequency=" + fmt.Sprintf("%f", cmd.maxFrequency),
 			"-include-variant-1=" + fmt.Sprintf("%v", cmd.includeVariant1),
 			"-debug-tag=" + fmt.Sprintf("%d", cmd.debugTag),
 		}
@@ -305,7 +307,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	}
 
 	if len(cmd.samples[0].pcaComponents) > 0 {
-		cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents, cmd.glmMinFrequency)
+		cmd.pvalue = glmPvalueFunc(cmd.samples, cmd.pcaComponents)
 		// Unfortunately, statsmodel/glm lib logs stuff to
 		// os.Stdout when it panics on an unsolvable
 		// problem. We recover() from the panic in glm.go, but
@@ -1564,6 +1566,7 @@ type onehotXref struct {
 	variant tileVariantID
 	hom     bool
 	pvalue  float64
+	maf     float64
 }
 
 const onehotXrefSize = unsafe.Sizeof(onehotXref{})
@@ -1635,12 +1638,28 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	var onehot [][]int8
 	var xref []onehotXref
+	var maf float64
 	for col := 2; col < len(obs); col++ {
 		// col 0,1 correspond to tile variant 0, i.e.,
 		// no-call; col 2,3 correspond to the most common
 		// variant; so we (normally) start at col 4.
 		if col < 4 && !cmd.includeVariant1 {
 			continue
+		}
+		if col&1 == 0 {
+			maf = homhet2maf(obs[col : col+2])
+			if maf < cmd.pvalueMinFrequency {
+				// Skip both columns (hom and het) if
+				// allele frequency is below threshold
+				col++
+				continue
+			}
+			if maf > cmd.maxFrequency {
+				// Skip both columns if allele
+				// frequency is above threshold
+				col++
+				continue
+			}
 		}
 		atomic.AddInt64(&cmd.pvalueCallCount, 1)
 		p := cmd.pvalue(obs[col])
@@ -1653,9 +1672,27 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 			variant: tileVariantID(col >> 1),
 			hom:     col&1 == 0,
 			pvalue:  p,
+			maf:     maf,
 		})
 	}
 	return onehot, xref
+}
+
+func homhet2maf(onehot [][]bool) float64 {
+	if len(onehot[0]) == 0 {
+		return 0
+	}
+	n := 0
+	for i := range onehot[0] {
+		if onehot[0][i] {
+			// hom
+			n += 2
+		} else if onehot[1][i] {
+			// het
+			n += 1
+		}
+	}
+	return float64(n) / float64(len(onehot[0])*2)
 }
 
 // convert a []onehotXref with length N to a numpy-style []int32
@@ -1666,7 +1703,7 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 // P-value row contains 1000000x actual p-value.
 func onehotXref2int32(xrefs []onehotXref) []int32 {
 	xcols := len(xrefs)
-	xdata := make([]int32, 5*xcols)
+	xdata := make([]int32, 6*xcols)
 	for i, xref := range xrefs {
 		xdata[i] = int32(xref.tag)
 		xdata[xcols+i] = int32(xref.variant)
@@ -1675,6 +1712,7 @@ func onehotXref2int32(xrefs []onehotXref) []int32 {
 		}
 		xdata[xcols*3+i] = int32(xref.pvalue * 1000000)
 		xdata[xcols*4+i] = int32(-math.Log10(xref.pvalue) * 1000000)
+		xdata[xcols*5+i] = int32(xref.maf * 1000000)
 	}
 	return xdata
 }
