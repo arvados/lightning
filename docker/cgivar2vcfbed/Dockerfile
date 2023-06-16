@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: AGPL-3.0
 
 FROM arvados/jobs
-MAINTAINER Jiayong Li <jli@curii.com>
 
 USER root
 

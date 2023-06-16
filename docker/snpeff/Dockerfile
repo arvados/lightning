@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: AGPL-3.0
 
 FROM ubuntu:18.04
-MAINTAINER Jiayong Li <jli@curii.com>
 USER root
 
 # Install necessary dependencies
