@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM arvados/jobs
+FROM python:3.8-buster
 
 USER root
 

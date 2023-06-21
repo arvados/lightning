@@ -7,7 +7,6 @@
 
 FROM python:3.8-buster
 USER root
-ARG DEBIAN_FRONTEND=noninteractive
 
 # Install necessary dependencies
 
