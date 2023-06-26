@@ -1268,7 +1268,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			for i := range cmd.samples {
 				cmd.samples[i].pcaComponents = make([]float64, outcols)
 				for c := 0; c < outcols; c++ {
-					cmd.samples[i].pcaComponents[i] = pca.At(i, c)
+					cmd.samples[i].pcaComponents[c] = pca.At(i, c)
 				}
 			}
 			log.Print("done")
