@@ -45,6 +45,7 @@ type sliceNumpy struct {
 	chi2Cases          []bool
 	chi2PValue         float64
 	pvalueMinFrequency float64
+	maxFrequency       float64
 	pcaComponents      int
 	minCoverage        int
 	includeVariant1    bool
