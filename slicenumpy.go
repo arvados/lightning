@@ -531,7 +531,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			if err == errSkip {
 				return nil
 			} else if err != nil {
-				return fmt.Errorf("%04d: DecodeLibrary(%s): err", infileIdx, infile)
+				return fmt.Errorf("%04d: DecodeLibrary(%s): %w", infileIdx, infile, err)
 			}
 			tagstart := cgs[cmd.cgnames[0]].StartTag
 			tagend := cgs[cmd.cgnames[0]].EndTag
