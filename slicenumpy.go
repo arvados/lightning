@@ -48,6 +48,7 @@ type sliceNumpy struct {
 	maxFrequency       float64
 	pcaComponents      int
 	minCoverage        int
+	minCoverageAll     bool
 	includeVariant1    bool
 	debugTag           tagID
 
@@ -94,6 +95,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 	flags.IntVar(&cmd.pcaComponents, "pca-components", 4, "number of PCA components to compute / use in logistic regression")
 	maxPCATiles := flags.Int("max-pca-tiles", 0, "maximum tiles to use as PCA input (filter, then drop every 2nd colum pair until below max)")
 	debugTag := flags.Int("debug-tag", -1, "log debugging details about specified tag")
+	flags.BoolVar(&cmd.minCoverageAll, "min-coverage-all", false, "apply -min-coverage filter based on all samples, not just training set")
 	flags.IntVar(&cmd.threads, "threads", 16, "number of memory-hungry assembly threads, and number of VCPUs to request for arvados container")
 	flags.Float64Var(&cmd.chi2PValue, "chi2-p-value", 1, "do Χ² test (or logistic regression if -samples file has PCA components) and omit columns with p-value above this threshold")
 	flags.Float64Var(&cmd.pvalueMinFrequency, "pvalue-min-frequency", 0.01, "skip p-value calculation on tile variants below this frequency in the training set")
@@ -151,6 +153,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			"-chunked-onehot=" + fmt.Sprintf("%v", *onehotChunked),
 			"-samples=" + *samplesFilename,
 			"-case-control-only=" + fmt.Sprintf("%v", *caseControlOnly),
+			"-min-coverage-all=" + fmt.Sprintf("%v", cmd.minCoverageAll),
 			"-pca=" + fmt.Sprintf("%v", *onlyPCA),
 			"-pca-components=" + fmt.Sprintf("%d", cmd.pcaComponents),
 			"-max-pca-tiles=" + fmt.Sprintf("%d", *maxPCATiles),
@@ -297,14 +300,14 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 			}
 		}
 	}
-	if cmd.filter.MinCoverage == 1 {
-		// In the generic formula below, floating point
-		// arithmetic can effectively push the coverage
-		// threshold above 1.0, which is impossible/useless.
-		// 1.0 needs to mean exactly 100% coverage.
+
+	if cmd.minCoverageAll {
 		cmd.minCoverage = len(cmd.cgnames)
 	} else {
-		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(len(cmd.cgnames))))
+		cmd.minCoverage = cmd.trainingSetSize
+	}
+	if cmd.filter.MinCoverage < 1 {
+		cmd.minCoverage = int(math.Ceil(cmd.filter.MinCoverage * float64(cmd.minCoverage)))
 	}
 
 	if len(cmd.samples[0].pcaComponents) > 0 {
@@ -553,7 +556,11 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 						count[blake2b.Sum256(rt.tiledata)] = 0
 					}
 
-					for cgname, cg := range cgs {
+					for cgidx, cgname := range cmd.cgnames {
+						if !cmd.minCoverageAll && !cmd.samples[cgidx].isTraining {
+							continue
+						}
+						cg := cgs[cgname]
 						idx := int(tag-tagstart) * 2
 						for allele := 0; allele < 2; allele++ {
 							v := cg.Variants[idx+allele]
@@ -1596,7 +1603,11 @@ func (cmd *sliceNumpy) tv2homhet(cgs map[string]CompactGenome, maxv tileVariantI
 	}
 	tagoffset := tag - chunkstarttag
 	coverage := 0
-	for _, cg := range cgs {
+	for cgidx, cgname := range cmd.cgnames {
+		if !cmd.minCoverageAll && !cmd.samples[cgidx].isTraining {
+			continue
+		}
+		cg := cgs[cgname]
 		alleles := 0
 		for _, v := range cg.Variants[tagoffset*2 : tagoffset*2+2] {
 			if v > 0 && int(v) < len(seq[tag]) && len(seq[tag][v].Sequence) > 0 {
