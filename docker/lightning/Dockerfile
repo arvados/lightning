@@ -28,7 +28,7 @@ RUN apt-get install -qy --no-install-recommends wget \
   python3-matplotlib \
   git
 
-RUN pip3 install sklearn
+RUN pip3 install scikit-learn
 RUN pip3 install --upgrade scipy
 
 # Installing go 1.19
