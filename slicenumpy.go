@@ -872,7 +872,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 						if cmd.filter.MaxTag >= 0 && tag > tagID(cmd.filter.MaxTag) {
 							break
 						}
-						if rt := reftile[tag]; rt == nil || rt.excluded {
+						if rt := reftile[tag]; mask != nil && (rt == nil || rt.excluded) {
 							continue
 						}
 						if v == 0 {
