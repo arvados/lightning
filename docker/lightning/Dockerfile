@@ -5,7 +5,7 @@
 # build instruction:
 # docker build -t dockername --file=/path/to/lightning/docker/lightning/Dockerfile /path/to/lightning
 
-FROM python:3.8-buster
+FROM python:3.11-buster
 USER root
 
 # Install necessary dependencies

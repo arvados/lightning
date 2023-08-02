@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM python:3.8-buster
+FROM python:3.11-buster
 
 USER root
 
