@@ -37,6 +37,7 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	pprof := flags.String("pprof", "", "serve Go profile data at http://`[addr]:port`")
+	pprofdir := flags.String("pprof-dir", "", "write Go profile data to `directory` periodically")
 	runlocal := flags.Bool("local", false, "run on local host (default: run in an arvados container)")
 	projectUUID := flags.String("project", "", "project `UUID` for output data")
 	priority := flags.Int("priority", 500, "container request priority")
@@ -60,6 +61,9 @@ func (cmd *slicecmd) RunCommand(prog string, args []string, stdin io.Reader, std
 		go func() {
 			log.Println(http.ListenAndServe(*pprof, nil))
 		}()
+	}
+	if *pprofdir != "" {
+		go writeProfilesPeriodically(*pprofdir)
 	}
 
 	if !*runlocal {
