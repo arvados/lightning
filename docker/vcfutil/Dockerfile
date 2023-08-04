@@ -2,8 +2,11 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM arvados/jobs
-MAINTAINER Jiayong Li <jli@curii.com>
+# build instruction:
+# docker build -t dockername --file=/path/to/lightning/docker/vcfutil/Dockerfile /path/to/lightning
+
+
+FROM python:3.11-buster
 
 USER root
 
@@ -11,6 +14,9 @@ RUN apt-get update -q
 
 RUN apt-get install -qy build-essential wget cmake zlib1g-dev \
     libbz2-dev liblzma-dev libncurses5-dev libncursesw5-dev git vcftools
+
+# Setting up gvcf_region
+COPY ./gvcf_regions /gvcf_regions
 
 # Getting HTSLIB 1.9 for tabix/bgzip
 
@@ -58,9 +64,3 @@ WORKDIR /
 RUN wget https://github.com/arq5x/bedtools2/releases/download/v2.27.1/bedtools-2.27.1.tar.gz && \
     tar -xzvf bedtools-2.27.1.tar.gz && \
     cd bedtools2 && make && cp bin/* /usr/local/bin
-
-WORKDIR /
-
-# Installing gvcf_regions
-
-RUN git clone https://github.com/lijiayong/gvcf_regions

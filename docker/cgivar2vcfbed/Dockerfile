@@ -2,14 +2,19 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM arvados/jobs
-MAINTAINER Jiayong Li <jli@curii.com>
+# build instruction:
+# docker build -t dockername --file=/path/to/lightning/docker/lightning/Dockerfile /path/to/lightning
+
+FROM python:3.11-buster
 
 USER root
 
 RUN apt-get update -q
 
 RUN apt-get install -qy build-essential wget cmake zlib1g-dev git
+
+# Seting up gvcf_regions
+COPY ./gvcf_regions /gvcf_regions
 
 # Installing cgatools 1.8.0
 
@@ -35,6 +40,4 @@ RUN wget https://github.com/arq5x/bedtools2/releases/download/v2.25.0/bedtools-2
 
 WORKDIR /
 
-# Installing gvcf_regions
 
-RUN git clone https://github.com/lijiayong/gvcf_regions
