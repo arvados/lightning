@@ -5,10 +5,8 @@
 # build instruction:
 # docker build -t dockername --file=/path/to/lightning/docker/lightning/Dockerfile /path/to/lightning
 
-FROM ubuntu:latest
-MAINTAINER Jiayong Li <jli@curii.com>s
+FROM python:3.11-buster
 USER root
-ARG DEBIAN_FRONTEND=noninteractive
 
 # Install necessary dependencies
 
@@ -24,15 +22,13 @@ RUN apt-get install -qy --no-install-recommends wget \
   libncursesw5-dev \
   gcc \
   make \
-  python3.8 \
-  python3-pip \
   python3-numpy \
   python3-pandas \
   python3-scipy \
   python3-matplotlib \
   git
 
-RUN pip3 install sklearn
+RUN pip3 install scikit-learn
 RUN pip3 install --upgrade scipy
 
 # Installing go 1.19

@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM ubuntu:18.04
-MAINTAINER Jiayong Li <jli@curii.com>
+FROM python:3.11-buster
 USER root
 
 # Install necessary dependencies
