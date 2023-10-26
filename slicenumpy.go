@@ -361,7 +361,7 @@ func (cmd *sliceNumpy) run(prog string, args []string, stdin io.Reader, stdout, 
 				return err
 			}
 			foundthistag := false
-			taglib.FindAll(tiledata[:len(tiledata)-1], func(tagid tagID, offset, _ int) {
+			taglib.FindAll(bufio.NewReader(bytes.NewReader(tiledata[:len(tiledata)-1])), nil, func(tagid tagID, offset, _ int) {
 				if !foundthistag && tagid == libref.Tag {
 					foundthistag = true
 					return
