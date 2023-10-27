@@ -185,7 +185,7 @@ func (cmd *importer) runBatches(stdout io.Writer, inputs []string) error {
 		Client:      arvadosClientFromEnv,
 		ProjectUUID: cmd.projectUUID,
 		APIAccess:   true,
-		RAM:         700000000000,
+		RAM:         350000000000,
 		VCPUs:       96,
 		Priority:    cmd.priority,
 		KeepCache:   1,
@@ -448,7 +448,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 	go close(todo)
 	var tileJobs sync.WaitGroup
 	var running int64
-	for i := 0; i < runtime.GOMAXPROCS(-1)*2; i++ {
+	for i := 0; i < runtime.GOMAXPROCS(-1); i++ {
 		tileJobs.Add(1)
 		atomic.AddInt64(&running, 1)
 		go func() {

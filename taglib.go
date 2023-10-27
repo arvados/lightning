@@ -6,7 +6,6 @@ package lightning
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 )
@@ -44,29 +43,58 @@ func (taglib *tagLibrary) Load(rdr io.Reader) error {
 	return taglib.setTags(seqs)
 }
 
-func (taglib *tagLibrary) FindAll(buf []byte, fn func(id tagID, pos, taglen int)) {
+func (taglib *tagLibrary) FindAll(in *bufio.Reader, passthrough io.Writer, fn func(id tagID, pos, taglen int)) error {
+	var window = make([]byte, 0, taglib.keylen*1000)
 	var key tagmapKey
-	valid := 0 // if valid < taglib.keylen, key has "no data" zeroes that are otherwise indistinguishable from "A"
-	for i, base := range buf {
+	for offset := 0; ; {
+		base, err := in.ReadByte()
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
+			return err
+		} else if base == '\r' || base == '\n' {
+			if buf, err := in.Peek(1); err == nil && len(buf) > 0 && buf[0] == '>' {
+				return nil
+			} else if err == io.EOF {
+				return nil
+			}
+			continue
+		} else if base == '>' || base == ' ' {
+			return fmt.Errorf("unexpected char %q at offset %d in fasta data", base, offset)
+		}
+
+		if passthrough != nil {
+			_, err = passthrough.Write([]byte{base})
+			if err != nil {
+				return err
+			}
+		}
 		if !isbase[int(base)] {
-			valid = 0
+			// 'N' or various other chars meaning exact
+			// base not known
+			window = window[:0]
 			continue
 		}
+		offset++
+		window = append(window, base)
+		if len(window) == cap(window) {
+			copy(window, window[len(window)-taglib.keylen:])
+			window = window[:taglib.keylen]
+		}
 		key = ((key << 2) | twobit[int(base)]) & taglib.keymask
-		valid++
 
-		if valid < taglib.keylen {
+		if len(window) < taglib.keylen {
 			continue
 		} else if taginfo, ok := taglib.tagmap[key]; !ok {
 			continue
-		} else if tagstart := i - taglib.keylen + 1; len(taginfo.tagseq) > taglib.keylen && (len(buf) < i+len(taginfo.tagseq) || !bytes.Equal(taginfo.tagseq, buf[i:i+len(taginfo.tagseq)])) {
-			// key portion matches, but not the entire tag
-			continue
+		} else if len(taginfo.tagseq) != taglib.keylen {
+			return fmt.Errorf("assertion failed: len(%q) != keylen %d", taginfo.tagseq, taglib.keylen)
 		} else {
-			fn(taginfo.id, tagstart, len(taginfo.tagseq))
-			valid = 0 // don't try to match overlapping tags
+			fn(taginfo.id, offset-taglib.keylen, len(taginfo.tagseq))
+			window = window[:0] // don't try to match overlapping tags
 		}
 	}
+	return nil
 }
 
 func (taglib *tagLibrary) Len() int {

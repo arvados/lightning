@@ -6,6 +6,7 @@ package lightning
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"math/rand"
@@ -45,7 +46,7 @@ gactctagcagagtggccagccac
 	c.Assert(err, check.IsNil)
 	haystack := []byte(`ggagaactgtgctccgccttcagaccccccccccccccccccccacacatgctagcgcgtcggggtgggggggggggggggggggggggggggactctagcagagtggccagccac`)
 	var matches []tagMatch
-	taglib.FindAll(haystack, func(id tagID, pos, taglen int) {
+	taglib.FindAll(bufio.NewReader(bytes.NewBuffer(haystack)), nil, func(id tagID, pos, taglen int) {
 		matches = append(matches, tagMatch{id, pos, taglen})
 	})
 	c.Check(matches, check.DeepEquals, []tagMatch{{0, 0, 24}, {1, 44, 24}, {2, 92, 24}})
@@ -90,7 +91,7 @@ func (s *taglibSuite) TestFindAllRealisticSize(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Logf("@%v find tags in input", time.Since(start))
 	var matches []tagMatch
-	taglib.FindAll(haystack, func(id tagID, pos, taglen int) {
+	taglib.FindAll(bufio.NewReader(bytes.NewBuffer(haystack)), nil, func(id tagID, pos, taglen int) {
 		matches = append(matches, tagMatch{id, pos, taglen})
 	})
 	c.Logf("@%v done", time.Since(start))

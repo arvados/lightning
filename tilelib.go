@@ -555,31 +555,6 @@ type importStats struct {
 
 func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChromosome *regexp.Regexp, isRef bool) (tileSeq, []importStats, error) {
 	ret := tileSeq{}
-	type jobT struct {
-		label string
-		fasta []byte
-	}
-	todo := make(chan jobT, 1)
-	scanner := bufio.NewScanner(rdr)
-	scanner.Buffer(make([]byte, 256), 1<<29) // 512 MiB, in case fasta does not have line breaks
-	go func() {
-		defer close(todo)
-		var fasta []byte
-		var seqlabel string
-		for scanner.Scan() {
-			buf := scanner.Bytes()
-			if len(buf) > 0 && buf[0] == '>' {
-				todo <- jobT{seqlabel, append([]byte(nil), fasta...)}
-				seqlabel, fasta = strings.SplitN(string(buf[1:]), " ", 2)[0], fasta[:0]
-				log.Debugf("%s %s reading fasta", filelabel, seqlabel)
-			} else if len(buf) > 0 && buf[0] == '#' {
-				// ignore testdata comment
-			} else {
-				fasta = append(fasta, bytes.ToLower(buf)...)
-			}
-		}
-		todo <- jobT{seqlabel, fasta}
-	}()
 	type foundtag struct {
 		pos   int
 		tagid tagID
@@ -591,22 +566,50 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 	skippedSequences := 0
 	taglen := tilelib.taglib.TagLen()
 	var stats []importStats
-	for job := range todo {
-		if len(job.fasta) == 0 {
-			continue
-		} else if !matchChromosome.MatchString(job.label) {
+
+	in := bufio.NewReader(rdr)
+readall:
+	for {
+		var seqlabel string
+		// Advance to next '>', then
+		// read seqlabel up to \r?\n
+	readseqlabel:
+		for seqlabelStarted := false; ; {
+			rune, _, err := in.ReadRune()
+			if err == io.EOF {
+				break readall
+			} else if err != nil {
+				return nil, nil, err
+			}
+			switch {
+			case rune == '\r':
+			case seqlabelStarted && rune == '\n':
+				break readseqlabel
+			case seqlabelStarted:
+				seqlabel += string(rune)
+			case rune == '>':
+				seqlabelStarted = true
+			default:
+			}
+		}
+		log.Debugf("%s %s reading fasta", filelabel, seqlabel)
+		if !matchChromosome.MatchString(seqlabel) {
 			skippedSequences++
 			continue
 		}
-		log.Debugf("%s %s tiling", filelabel, job.label)
+		log.Debugf("%s %s tiling", filelabel, seqlabel)
 
+		fasta := bytes.NewBuffer(nil)
 		found = found[:0]
-		tilelib.taglib.FindAll(job.fasta, func(tagid tagID, pos, taglen int) {
+		err := tilelib.taglib.FindAll(in, fasta, func(tagid tagID, pos, taglen int) {
 			found = append(found, foundtag{pos: pos, tagid: tagid})
 		})
+		if err != nil {
+			return nil, nil, err
+		}
 		totalFoundTags += len(found)
 		if len(found) == 0 {
-			log.Warnf("%s %s no tags found", filelabel, job.label)
+			log.Warnf("%s %s no tags found", filelabel, seqlabel)
 		}
 
 		droppedDup := 0
@@ -624,7 +627,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 				}
 			}
 			droppedDup = len(found) - dst
-			log.Infof("%s %s dropping %d non-unique tags", filelabel, job.label, droppedDup)
+			log.Infof("%s %s dropping %d non-unique tags", filelabel, seqlabel, droppedDup)
 			found = found[:dst]
 		}
 
@@ -635,11 +638,11 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 				found[i] = found[x]
 			}
 			droppedOOO = len(found) - len(keep)
-			log.Infof("%s %s dropping %d out-of-order tags", filelabel, job.label, droppedOOO)
+			log.Infof("%s %s dropping %d out-of-order tags", filelabel, seqlabel, droppedOOO)
 			found = found[:len(keep)]
 		}
 
-		log.Infof("%s %s getting %d librefs", filelabel, job.label, len(found))
+		log.Infof("%s %s getting %d librefs", filelabel, seqlabel, len(found))
 		throttle := &throttle{Max: runtime.NumCPU()}
 		path = path[:len(found)]
 		var lowquality int64
@@ -655,30 +658,30 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 					startpos = f.pos
 				}
 				if i == len(found)-1 {
-					endpos = len(job.fasta)
+					endpos = fasta.Len()
 				} else {
 					endpos = found[i+1].pos + taglen
 				}
-				path[i] = tilelib.getRef(f.tagid, job.fasta[startpos:endpos], isRef)
-				if countBases(job.fasta[startpos:endpos]) != endpos-startpos {
+				path[i] = tilelib.getRef(f.tagid, fasta.Bytes()[startpos:endpos], isRef)
+				if countBases(fasta.Bytes()[startpos:endpos]) != endpos-startpos {
 					atomic.AddInt64(&lowquality, 1)
 				}
 			}()
 		}
 		throttle.Wait()
 
-		log.Infof("%s %s copying path", filelabel, job.label)
+		log.Infof("%s %s copying path", filelabel, seqlabel)
 
 		pathcopy := make([]tileLibRef, len(path))
 		copy(pathcopy, path)
-		ret[job.label] = pathcopy
+		ret[seqlabel] = pathcopy
 
-		basesIn := countBases(job.fasta)
-		log.Infof("%s %s fasta in %d coverage in %d path len %d low-quality %d", filelabel, job.label, len(job.fasta), basesIn, len(path), lowquality)
+		basesIn := countBases(fasta.Bytes())
+		log.Infof("%s %s fasta in %d coverage in %d path len %d low-quality %d", filelabel, seqlabel, fasta.Len(), basesIn, len(path), lowquality)
 		stats = append(stats, importStats{
 			InputFile:             filelabel,
-			InputLabel:            job.label,
-			InputLength:           len(job.fasta),
+			InputLabel:            seqlabel,
+			InputLength:           fasta.Len(),
 			InputCoverage:         basesIn,
 			PathLength:            len(path),
 			DroppedOutOfOrderTags: droppedOOO,
@@ -688,7 +691,7 @@ func (tilelib *tileLibrary) TileFasta(filelabel string, rdr io.Reader, matchChro
 		totalPathLen += len(path)
 	}
 	log.Printf("%s tiled with total path len %d in %d sequences (skipped %d sequences that did not match chromosome regexp, skipped %d out-of-order tags)", filelabel, totalPathLen, len(ret), skippedSequences, totalFoundTags-totalPathLen)
-	return ret, stats, scanner.Err()
+	return ret, stats, nil
 }
 
 func (tilelib *tileLibrary) Len() int64 {
