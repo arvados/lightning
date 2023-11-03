@@ -643,32 +643,25 @@ readall:
 		}
 
 		log.Infof("%s %s getting %d librefs", filelabel, seqlabel, len(found))
-		throttle := &throttle{Max: runtime.NumCPU()}
 		path = path[:len(found)]
 		var lowquality int64
 		for i, f := range found {
-			i, f := i, f
-			throttle.Acquire()
-			go func() {
-				defer throttle.Release()
-				var startpos, endpos int
-				if i == 0 {
-					startpos = 0
-				} else {
-					startpos = f.pos
-				}
-				if i == len(found)-1 {
-					endpos = fasta.Len()
-				} else {
-					endpos = found[i+1].pos + taglen
-				}
-				path[i] = tilelib.getRef(f.tagid, fasta.Bytes()[startpos:endpos], isRef)
-				if countBases(fasta.Bytes()[startpos:endpos]) != endpos-startpos {
-					atomic.AddInt64(&lowquality, 1)
-				}
-			}()
+			var startpos, endpos int
+			if i == 0 {
+				startpos = 0
+			} else {
+				startpos = f.pos
+			}
+			if i == len(found)-1 {
+				endpos = fasta.Len()
+			} else {
+				endpos = found[i+1].pos + taglen
+			}
+			path[i] = tilelib.getRef(f.tagid, fasta.Bytes()[startpos:endpos], isRef)
+			if countBases(fasta.Bytes()[startpos:endpos]) != endpos-startpos {
+				lowquality++
+			}
 		}
-		throttle.Wait()
 
 		log.Infof("%s %s copying path", filelabel, seqlabel)
 
