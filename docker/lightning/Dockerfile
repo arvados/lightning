@@ -22,14 +22,9 @@ RUN apt-get install -qy --no-install-recommends wget \
   libncursesw5-dev \
   gcc \
   make \
-  python3-numpy \
-  python3-pandas \
-  python3-scipy \
-  python3-matplotlib \
   git
 
-RUN pip3 install scikit-learn
-RUN pip3 install --upgrade scipy
+RUN pip install --upgrade pip matplotlib numpy pandas scikit-learn scipy
 
 # Installing go 1.19
 
