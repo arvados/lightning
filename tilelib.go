@@ -11,6 +11,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"regexp"
 	"runtime"
@@ -645,7 +646,16 @@ readall:
 		log.Infof("%s %s getting %d librefs", filelabel, seqlabel, len(found))
 		path = path[:len(found)]
 		var lowquality int64
-		for i, f := range found {
+		// Visit each element of found, but start at a random
+		// index, to reduce the likelihood of lock contention
+		// when importing many samples concurrently.
+		startpoint := rand.Int() % len(found)
+		for offset := range found {
+			i := startpoint + offset
+			if i >= len(found) {
+				i -= len(found)
+			}
+			f := found[i]
 			var startpos, endpos int
 			if i == 0 {
 				startpos = 0
