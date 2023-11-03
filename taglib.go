@@ -73,13 +73,13 @@ func (taglib *tagLibrary) FindAll(in *bufio.Reader, passthrough io.Writer, fn fu
 				return err
 			}
 		}
+		offset++
 		if !isbase[int(base)] {
 			// 'N' or various other chars meaning exact
 			// base not known
 			window = window[:0]
 			continue
 		}
-		offset++
 		window = append(window, base)
 		if len(window) == cap(window) {
 			copy(window, window[len(window)-taglib.keylen:])
