@@ -64,6 +64,10 @@ func (taglib *tagLibrary) FindAll(in *bufio.Reader, passthrough io.Writer, fn fu
 		}
 
 		if passthrough != nil {
+			if base >= 'A' && base <= 'Z' {
+				// lowercase for passthrough
+				base += 'a' - 'A'
+			}
 			_, err = passthrough.Write([]byte{base})
 			if err != nil {
 				return err
