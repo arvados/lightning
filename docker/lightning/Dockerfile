@@ -26,10 +26,8 @@ RUN apt-get install -qy --no-install-recommends wget \
 
 RUN pip install --upgrade pip matplotlib numpy pandas scikit-learn scipy
 
-# Installing go 1.19
-
-RUN wget https://go.dev/dl/go1.19.3.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.19.3.linux-amd64.tar.gz
+RUN wget --progress=dot:giga https://go.dev/dl/go1.20.10.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.20.10.linux-amd64.tar.gz
 
 ENV PATH $PATH:/usr/local/go/bin:/root/go/bin
 
