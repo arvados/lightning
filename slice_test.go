@@ -244,12 +244,21 @@ pipeline1dup/input1	1
 pipeline1dup/input2	0
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-hgvs-matrix=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=0.5",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -280,12 +289,21 @@ pipeline1dup/input1	1
 pipeline1dup/input2	0
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-onehot=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=0.5",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -324,12 +342,21 @@ pipeline1dup/input1	1
 pipeline1dup/input2	0
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-single-onehot=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=0.5",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -580,12 +607,21 @@ func (s *sliceSuite) TestSpanningTile(c *check.C) {
 spanningtile/input1	1
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-hgvs-matrix=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=1",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -607,12 +643,21 @@ spanningtile/input1	1
 spanningtile/input1	1
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-chunked-onehot=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=1",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,
@@ -645,12 +690,21 @@ spanningtile/input1	1
 spanningtile/input1	1
 `), 0600)
 		c.Assert(err, check.IsNil)
+
+		exited := (&chooseSamples{}).RunCommand("choose-samples", []string{
+			"-local=true",
+			"-case-control-file=" + tmpdir + "/casecontrol.tsv",
+			"-case-control-column=CC",
+			"-input-dir=" + slicedir,
+			"-output-dir=" + tmpdir,
+		}, nil, os.Stderr, os.Stderr)
+		c.Check(exited, check.Equals, 0)
+
 		npydir := c.MkDir()
-		exited := (&sliceNumpy{}).RunCommand("slice-numpy", []string{
+		exited = (&sliceNumpy{}).RunCommand("slice-numpy", []string{
 			"-local=true",
 			"-single-onehot=true",
-			"-chi2-case-control-file=" + tmpdir + "/casecontrol.tsv",
-			"-chi2-case-control-column=CC",
+			"-samples=" + tmpdir + "/samples.csv",
 			"-chi2-p-value=1",
 			"-min-coverage=0.75",
 			"-input-dir=" + slicedir,

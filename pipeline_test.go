@@ -107,7 +107,7 @@ chr1:g.[302=];[302_305delinsAAAA]	.
 chr2:g.[241_254del];[241=]	.
 chr2:g.[258_269delinsAA];[258=]	.
 chr2:g.[315C>A];[315=]	.
-chr2:g.[470_472del];[470=]	.
+chr2:g.[469_471del];[469=]	.
 chr2:g.[471=];[471G>A]	.
 chr2:g.[472=];[472G>A]	.
 `))
@@ -130,7 +130,7 @@ chr2	125	.	CTT	AAA	.	.	.	GT	0/0	1/1
 chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
 chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
 chr2	315	.	C	A	.	.	.	GT	1/0	0/0
-chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
+chr2	468	.	CGTG	C	.	.	.	GT	1/0	0/0
 chr2	471	.	G	A	.	.	.	GT	0/1	0/0
 chr2	472	.	G	A	.	.	.	GT	0/1	0/0
 `))
@@ -169,7 +169,7 @@ chr2 472 572 7 1000 . 496 572
 4,4,fe9a71a42adb4,chr2:g.125_127delinsAAA
 6,6,e36dce85efbef,chr2:g.471G>A
 6,6,e36dce85efbef,chr2:g.472G>A
-6,6,f81388b184f4a,chr2:g.470_472del
+6,6,f81388b184f4a,chr2:g.469_471del
 `))
 }
 

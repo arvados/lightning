@@ -82,7 +82,7 @@ chr2.125_127delinsAAA	0	1
 chr2.241_254del	1	0
 chr2.258_269delinsAA	1	0
 chr2.315C>A	1	0
-chr2.470_472del	1	0
+chr2.469_471del	1	0
 chr2.471G>A	1	0
 chr2.472G>A	1	0
 `))
@@ -123,7 +123,7 @@ chr2	125	.	CTT	AAA	.	.	.	GT	0/0	1/1
 chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	.	GT	1/0	0/0
 chr2	258	.	CCTTGTATTTTT	AA	.	.	.	GT	1/0	0/0
 chr2	315	.	C	A	.	.	.	GT	1/0	0/0
-chr2	469	.	GTGG	G	.	.	.	GT	1/0	0/0
+chr2	468	.	CGTG	C	.	.	.	GT	1/0	0/0
 chr2	471	.	G	A	.	.	.	GT	0/1	0/0
 chr2	472	.	G	A	.	.	.	GT	0/1	0/0
 `))
@@ -157,7 +157,7 @@ chr2	125	.	CTT	AAA	.	.	AC=2
 chr2	240	.	ATTTTTCTTGCTCTC	A	.	.	AC=1
 chr2	258	.	CCTTGTATTTTT	AA	.	.	AC=1
 chr2	315	.	C	A	.	.	AC=1
-chr2	469	.	GTGG	G	.	.	AC=1
+chr2	468	.	CGTG	C	.	.	AC=1
 chr2	471	.	G	A	.	.	AC=1
 chr2	472	.	G	A	.	.	AC=1
 `))
@@ -218,7 +218,7 @@ chr2	472	.	G	A	.	.	AC=1
 2,"chr2.241_254del"
 3,"chr2.258_269delinsAA"
 4,"chr2.315C>A"
-5,"chr2.470_472del"
+5,"chr2.469_471del"
 6,"chr2.471G>A"
 7,"chr2.472G>A"
 `)
