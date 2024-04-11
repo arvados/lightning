@@ -12,7 +12,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/arvados/lightning/hgvs"
+	"github.com/arvados/lightning/go-lightning/hgvs"
 )
 
 type diffFasta struct{}

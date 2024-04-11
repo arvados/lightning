@@ -4,7 +4,7 @@
 
 package main
 
-import "github.com/arvados/lightning"
+import "github.com/arvados/lightning/go-lightning"
 
 func main() {
 	lightning.Main()
