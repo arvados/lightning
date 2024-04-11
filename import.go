@@ -281,8 +281,8 @@ func (cmd *importer) loadTagLibrary() (*tagLibrary, error) {
 
 var (
 	vcfFilenameRe    = regexp.MustCompile(`\.vcf(\.gz)?$`)
-	fasta1FilenameRe = regexp.MustCompile(`\.1\.fa(sta)?(\.gz)?$`)
-	fasta2FilenameRe = regexp.MustCompile(`\.2\.fa(sta)?(\.gz)?$`)
+	fasta1FilenameRe = regexp.MustCompile(`\.1\.fa(sta)?(\.fa(sta)?)?(\.gz)?$`)
+	fasta2FilenameRe = regexp.MustCompile(`\.2\.fa(sta)?(\.fa(sta)?)?(\.gz)?$`)
 	fastaFilenameRe  = regexp.MustCompile(`\.fa(sta)?(\.gz)?$`)
 )
 
@@ -347,32 +347,32 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 		if fasta1FilenameRe.MatchString(infile) {
 			todo <- func() error {
 				defer phases.Done()
-				log.Printf("%s starting", infile)
+				log.Printf("%s (sample.1) starting tiling", infile)
 				defer log.Printf("%s done", infile)
 				tseqs, stats, err := cmd.tileFasta(tilelib, infile, false)
 				allstats[idx*2] = stats
 				var kept, dropped int
 				variants[0], kept, dropped = tseqs.Variants()
-				log.Printf("%s found %d unique tags plus %d repeats", infile, kept, dropped)
+				log.Printf("%s (sample.1) found %d unique tags plus %d repeats", infile, kept, dropped)
 				return err
 			}
-			infile2 := fasta1FilenameRe.ReplaceAllString(infile, `.2.fa$1$2`)
+			infile2 := fasta1FilenameRe.ReplaceAllString(infile, `.2.fa$1$2$4`)
 			todo <- func() error {
 				defer phases.Done()
-				log.Printf("%s starting", infile2)
+				log.Printf("%s (sample.2) starting tiling", infile2)
 				defer log.Printf("%s done", infile2)
 				tseqs, stats, err := cmd.tileFasta(tilelib, infile2, false)
 				allstats[idx*2+1] = stats
 				var kept, dropped int
 				variants[1], kept, dropped = tseqs.Variants()
-				log.Printf("%s found %d unique tags plus %d repeats", infile2, kept, dropped)
+				log.Printf("%s (sample.2) found %d unique tags plus %d repeats", infile2, kept, dropped)
 				return err
 			}
 		} else if fastaFilenameRe.MatchString(infile) {
 			todo <- func() error {
 				defer phases.Done()
 				defer phases.Done()
-				log.Printf("%s starting", infile)
+				log.Printf("%s (reference) starting tiling", infile)
 				defer log.Printf("%s done", infile)
 				tseqs, stats, err := cmd.tileFasta(tilelib, infile, true)
 				allstats[idx*2] = stats
@@ -383,7 +383,7 @@ func (cmd *importer) tileInputs(tilelib *tileLibrary, infiles []string) error {
 				for _, tseq := range tseqs {
 					totlen += len(tseq)
 				}
-				log.Printf("%s tiled %d seqs, total len %d", infile, len(tseqs), totlen)
+				log.Printf("%s (reference) tiled %d seqs, total len %d", infile, len(tseqs), totlen)
 
 				if cmd.retainAfterEncoding {
 					tilelib.mtx.Lock()
