@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
-	"github.com/arvados/lightning/hgvs"
+	"github.com/arvados/lightning/go-lightning/hgvs"
 	"github.com/kshedden/gonpy"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"

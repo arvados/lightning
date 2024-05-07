@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
-	"github.com/arvados/lightning/hgvs"
+	"github.com/arvados/lightning/go-lightning/hgvs"
 	"github.com/klauspost/pgzip"
 	"github.com/kshedden/gonpy"
 	"github.com/sirupsen/logrus"

@@ -1,6 +1,6 @@
 .licenseignore
 AUTHORS
-go.mod
-go.sum
-testdata/*
+go-lightning/go.mod
+go-lightning/go.sum
+go-lightning/testdata/*
 readme.md

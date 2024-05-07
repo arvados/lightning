@@ -1,6 +1,6 @@
-module github.com/arvados/lightning
+module github.com/arvados/lightning/go-lightning
 
-go 1.17
+go 1.20
 
 require (
 	git.arvados.org/arvados.git v0.0.0-20221110193247-c80603fb6b95

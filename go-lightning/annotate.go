@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"git.arvados.org/arvados.git/sdk/go/arvados"
-	"github.com/arvados/lightning/hgvs"
+	"github.com/arvados/lightning/go-lightning/hgvs"
 	log "github.com/sirupsen/logrus"
 )
 
